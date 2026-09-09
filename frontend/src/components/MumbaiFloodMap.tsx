@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Popup } from 'maplibre-gl'
 import type { Map, MapMouseEvent } from 'maplibre-gl'
-import { Box, Layers, Satellite } from 'lucide-react'
+import { Box, Layers, Satellite } from './icons'
 import MapControls from './MapControls'
 import { useMumbaiMap } from '../hooks/useMumbaiMap'
 import Panel, { PanelCaption, PanelLabel } from './ui/Panel'

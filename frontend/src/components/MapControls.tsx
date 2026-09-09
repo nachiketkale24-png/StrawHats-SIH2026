@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { PointerEvent, RefObject } from 'react'
 import type * as maplibregl from 'maplibre-gl'
 import { motion, useReducedMotion } from 'framer-motion'
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Minus, Plus } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Minus, Plus } from './icons'
 
 type Action = 'in' | 'out' | 'north' | 'east' | 'south' | 'west'
 type Props = { mapRef: RefObject<maplibregl.Map | null> }
