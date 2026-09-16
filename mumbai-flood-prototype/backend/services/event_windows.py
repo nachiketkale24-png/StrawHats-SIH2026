@@ -21,8 +21,7 @@ def get_windows(event_date):
         return {"event_date": event_date, "windows": []}
     manifest = json.loads(path.read_text(encoding="utf-8"))
     manifest["windows"] = [window for window in manifest["windows"]
-        if config.flood_risk_tif(f"{event_date}_{window['minutes']}min").exists()
-        and config.road_graph_pickle(f"{event_date}_{window['minutes']}min").exists()]
+        if config.flood_risk_tif(f"{event_date}_{window['minutes']}min").exists()]
     return manifest
 
 

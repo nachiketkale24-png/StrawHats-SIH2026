@@ -66,7 +66,13 @@ def run(event_date=None, force=False):
     print(f'Saved coverage mask: {config.COVERAGE_MASK_TIF}', flush=True)
 
     print('Building road graph...', flush=True)
-    graph, roads = build_road_graph()
+    try:
+        graph, roads = build_road_graph()
+    except Exception as exc:
+        # Flood rasters and event windows are still useful without the optional
+        # road intermediate; routing is skipped until it is provided.
+        print(f'Road graph unavailable; generating flood events without routing: {exc}', flush=True)
+        graph, roads = None, None
     for date in dates:
         event = date.strftime("%Y-%m-%d")
         day = rainfall.loc[rainfall.index.date == date.date()]
@@ -79,16 +85,17 @@ def run(event_date=None, force=False):
             raster_path = config.flood_risk_tif(key)
             graph_path = config.road_graph_pickle(key)
             end = start + pd.Timedelta(minutes=minutes)
-            if force or not (raster_path.exists() and graph_path.exists()):
+            if force or not raster_path.exists() or (graph is not None and not graph_path.exists()):
                 print(f'Computing {event}: {minutes} minutes...', flush=True)
                 totals = day.loc[(day.index >= start) & (day.index < end), station_cols].sum()
                 grid = interpolate_rainfall_to_grid(totals, stations, station_cols, lon, lat)
                 fsi, _ = compute_fsi(grid, vulnerability, valid)
                 save_fsi_raster(fsi, valid, transform, crs, raster_path)
-                weighted, _ = attach_flood_risk(graph.copy(), roads.crs, raster_path)
-                temporary = graph_path.with_suffix('.gpickle.tmp')
-                save_graph(weighted, temporary)
-                temporary.replace(graph_path)
+                if graph is not None:
+                    weighted, _ = attach_flood_risk(graph.copy(), roads.crs, raster_path)
+                    temporary = graph_path.with_suffix('.gpickle.tmp')
+                    save_graph(weighted, temporary)
+                    temporary.replace(graph_path)
             manifest["windows"].append({"minutes": minutes, "start_time": start.isoformat(), "end_time": end.isoformat()})
             # Publish only intervals with both a finished raster and graph.
             manifest_path = config.DATA_PROCESSED_DIR / f"event_windows_{event}.json"
