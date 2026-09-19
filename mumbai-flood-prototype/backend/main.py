@@ -10,6 +10,14 @@ produced, for at least one event:
     data/processed/mumbai_road_graph_<event_date>.gpickle
 """
 
+import sys
+from pathlib import Path
+
+# Ensure the project root is in sys.path so `backend.*` imports work regardless of working directory
+_parent = str(Path(__file__).resolve().parent.parent)
+if _parent not in sys.path:
+    sys.path.insert(0, _parent)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
