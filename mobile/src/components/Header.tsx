@@ -16,19 +16,15 @@ interface HeaderProps {
 
 export default function Header({ activeEvent, loading, onOpenSettings }: HeaderProps) {
   const insets = useSafeAreaInsets()
-  
-  // Account for Android status bar height + notch safety
-  const androidStatusBarHeight = RNStatusBar.currentHeight ?? 24
-  const topPadding = Platform.OS === 'android' 
-    ? Math.max(androidStatusBarHeight + 6, insets.top + 6)
-    : Math.max(insets.top, 12)
+  // Subtle top padding under status bar
+  const topPadding = Platform.OS === 'android' ? 10 : Math.max(insets.top, 10)
 
   return (
     <View style={[styles.container, { paddingTop: topPadding }]}>
       {/* Left: Shield Icon + Title + Badge */}
       <View style={styles.leftContainer}>
         <View style={styles.iconBox}>
-          <Ionicons name="shield-checkmark" size={15} color={Colors.goldLight} />
+          <Ionicons name="shield-checkmark" size={17} color={Colors.goldLight} />
         </View>
 
         <View style={styles.titleColumn}>
@@ -56,12 +52,12 @@ export default function Header({ activeEvent, loading, onOpenSettings }: HeaderP
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             activeOpacity={0.7}
           >
-            <Ionicons name="server-outline" size={13} color={Colors.gold} />
+            <Ionicons name="server-outline" size={14} color={Colors.gold} />
           </TouchableOpacity>
         )}
 
         <View style={styles.fsiBox}>
-          <MaterialCommunityIcons name="pulse" size={12} color={Colors.cyanPrimary} />
+          <MaterialCommunityIcons name="pulse" size={13} color={Colors.cyanPrimary} />
           <Text style={styles.fsiLabel}>FSI</Text>
         </View>
       </View>
@@ -75,7 +71,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingBottom: 10,
     backgroundColor: '#04040a',
     borderBottomWidth: 1,
@@ -87,14 +83,14 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     minWidth: 0,
-    marginRight: 6,
+    marginRight: 8,
   },
   iconBox: {
-    height: 30,
-    width: 30,
-    borderRadius: 8,
+    height: 34,
+    width: 34,
+    borderRadius: 9,
     borderWidth: 1,
     borderColor: 'rgba(212,175,55,0.35)',
     backgroundColor: 'rgba(212,175,55,0.1)',
@@ -110,57 +106,57 @@ const styles = StyleSheet.create({
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
     minWidth: 0,
   },
   title: {
     fontFamily: Fonts.monoBold,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '800',
-    letterSpacing: 0.6,
+    letterSpacing: 0.7,
     color: Colors.textHeading,
     flexShrink: 1,
   },
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 3.5,
     borderWidth: 1,
     borderColor: 'rgba(16,185,129,0.35)',
     backgroundColor: 'rgba(16,185,129,0.12)',
     borderRadius: 10,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
     flexShrink: 0,
   },
   badgeDot: {
-    height: 4,
-    width: 4,
-    borderRadius: 2,
+    height: 4.5,
+    width: 4.5,
+    borderRadius: 2.5,
     backgroundColor: Colors.emerald400,
   },
   badgeText: {
     fontFamily: Fonts.monoBold,
-    fontSize: 7,
+    fontSize: 7.5,
     color: Colors.emerald400,
   },
   subtitle: {
     fontFamily: Fonts.mono,
-    fontSize: 8,
-    letterSpacing: 0.2,
+    fontSize: 8.5,
+    letterSpacing: 0.25,
     color: Colors.textSecondary,
-    marginTop: 1,
+    marginTop: 2,
   },
   rightActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     flexShrink: 0,
   },
   settingsBtn: {
-    height: 28,
-    width: 28,
-    borderRadius: 7,
+    height: 32,
+    width: 32,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: Colors.borderSecondary,
     backgroundColor: Colors.bgSecondary,
@@ -170,17 +166,17 @@ const styles = StyleSheet.create({
   fsiBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 4,
     borderWidth: 1,
     borderColor: Colors.borderSecondary,
     backgroundColor: 'rgba(12,14,26,0.9)',
-    borderRadius: 7,
-    paddingHorizontal: 6,
-    paddingVertical: 4,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5.5,
   },
   fsiLabel: {
     fontFamily: Fonts.monoBold,
-    fontSize: 9.5,
+    fontSize: 10,
     color: Colors.textPrimary,
   },
 })

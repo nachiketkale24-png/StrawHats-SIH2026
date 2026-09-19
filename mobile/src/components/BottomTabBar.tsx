@@ -17,8 +17,8 @@ interface Props {
 export default function BottomTabBar({ activeTab, onSelectTab }: Props) {
   const insets = useSafeAreaInsets()
   const bottomInset = Platform.OS === 'android' 
-    ? Math.max(8, insets.bottom)
-    : Math.max(14, insets.bottom)
+    ? Math.max(10, insets.bottom)
+    : Math.max(8, insets.bottom)
 
   return (
     <View
@@ -145,8 +145,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Colors.borderPrimary,
     backgroundColor: '#04040a',
-    paddingTop: 6,
-    paddingHorizontal: 6,
+    paddingTop: 5,
+    paddingHorizontal: 8,
     zIndex: 40,
     overflow: 'hidden',
   },
@@ -155,8 +155,8 @@ const styles = StyleSheet.create({
     minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 6,
-    marginHorizontal: 2,
+    paddingVertical: 5,
+    marginHorizontal: 3,
     borderRadius: 8,
     gap: 3,
     borderWidth: 1,
@@ -176,9 +176,9 @@ const styles = StyleSheet.create({
   },
   tabLabel: {
     fontFamily: Fonts.monoBold,
-    fontSize: 9.5,
+    fontSize: 10,
     color: Colors.textSecondary,
-    letterSpacing: 0.1,
+    letterSpacing: 0.2,
   },
   tabLabelActiveGold: {
     color: Colors.goldLight,
