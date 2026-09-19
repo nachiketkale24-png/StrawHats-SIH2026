@@ -3,13 +3,12 @@ import { StatusBar } from 'expo-status-bar'
 import { StyleSheet, View } from 'react-native'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import MapScreen from './src/screens/MapScreen'
-import { Colors } from './src/theme'
 
 export default function App() {
   return (
-    <SafeAreaProvider>
+    <SafeAreaProvider style={styles.container}>
       <View style={styles.container}>
-        <StatusBar style="light" />
+        <StatusBar style="light" backgroundColor="#04040a" />
         <MapScreen />
       </View>
     </SafeAreaProvider>
@@ -19,6 +18,6 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.bgVoid,
+    backgroundColor: '#04040a',
   },
 })

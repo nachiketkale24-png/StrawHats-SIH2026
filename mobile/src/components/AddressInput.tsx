@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
     top: 48,
     left: 0,
     right: 0,
-    backgroundColor: '#0c0e1a', // 100% solid opaque dark panel
+    backgroundColor: '#060710', // 100% solid opaque dark panel
     borderWidth: 1,
     borderColor: Colors.borderPrimary,
     borderRadius: 12,
@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(212, 175, 55, 0.12)',
-    backgroundColor: '#0c0e1a',
+    backgroundColor: '#060710',
   },
   suggestionItemLast: {
     borderBottomWidth: 0,

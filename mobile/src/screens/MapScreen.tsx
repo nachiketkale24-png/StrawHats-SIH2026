@@ -12,6 +12,7 @@ import {
   Animated,
   Dimensions,
   Alert,
+  PanResponder,
 } from 'react-native'
 import * as Location from 'expo-location'
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
@@ -33,7 +34,7 @@ import { Colors, Fonts } from '../theme'
 import type { RoutePoint } from '../types/flood'
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window')
-const SHEET_HEIGHT = Math.min(SCREEN_HEIGHT * 0.52, 440)
+const SHEET_HEIGHT = Math.min(SCREEN_HEIGHT * 0.58, 480)
 
 export default function MapScreen() {
   const insets = useSafeAreaInsets()
@@ -68,8 +69,8 @@ export default function MapScreen() {
     inspectPoint,
   } = useFloodData()
 
-  // Local UI State
-  const [activeTab, setActiveTab] = useState<'events' | 'routes' | 'legend' | 'inspect' | null>('events')
+  // Local UI State - default is full map only (no sheet open)
+  const [activeTab, setActiveTab] = useState<'events' | 'routes' | 'legend' | 'inspect' | null>(null)
   const [mapType, setMapType] = useState<'standard' | 'satellite'>('standard')
   const [settingsVisible, setSettingsVisible] = useState(false)
 
@@ -82,13 +83,50 @@ export default function MapScreen() {
   const sheetAnim = useRef(new Animated.Value(activeTab ? 0 : SHEET_HEIGHT)).current
 
   useEffect(() => {
-    Animated.spring(sheetAnim, {
-      toValue: activeTab ? 0 : SHEET_HEIGHT,
-      useNativeDriver: true,
-      bounciness: 0,
-      speed: 18,
-    }).start()
+    if (activeTab) {
+      Animated.spring(sheetAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        bounciness: 0,
+        speed: 18,
+      }).start()
+    } else {
+      Animated.timing(sheetAnim, {
+        toValue: SHEET_HEIGHT,
+        duration: 220,
+        useNativeDriver: true,
+      }).start()
+    }
   }, [activeTab])
+
+  // Slidable PanResponder to drag/swipe down to close sheet
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => gestureState.dy > 4,
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          sheetAnim.setValue(gestureState.dy)
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 60 || gestureState.vy > 0.4) {
+          Animated.timing(sheetAnim, {
+            toValue: SHEET_HEIGHT,
+            duration: 200,
+            useNativeDriver: true,
+          }).start(() => setActiveTab(null))
+        } else {
+          Animated.spring(sheetAnim, {
+            toValue: 0,
+            useNativeDriver: true,
+            bounciness: 3,
+            speed: 16,
+          }).start()
+        }
+      },
+    })
+  ).current
 
   // Map Press Handler
   const handleMapPress = async ({ latitude, longitude }: { latitude: number; longitude: number }) => {
@@ -223,18 +261,6 @@ export default function MapScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Floating Toggle Pill when Bottom Sheet is open */}
-        {activeTab !== null && (
-          <TouchableOpacity
-            style={styles.collapsePill}
-            onPress={() => setActiveTab(null)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="chevron-down" size={14} color={Colors.gold} />
-            <Text style={styles.collapsePillText}>Show Full Map</Text>
-          </TouchableOpacity>
-        )}
-
         {/* Floating Status / Error Banner */}
         <StatusToast
           loading={eventsLoading}
@@ -243,7 +269,7 @@ export default function MapScreen() {
           onDismissError={() => {}}
         />
 
-        {/* Sliding Bottom Sheet Container */}
+        {/* Sliding Bottom Sheet Container with PanResponder */}
         <Animated.View
           style={[
             styles.bottomSheet,
@@ -252,14 +278,10 @@ export default function MapScreen() {
             },
           ]}
         >
-          {/* Sheet Handle Bar */}
-          <TouchableOpacity
-            style={styles.sheetHandleWrap}
-            onPress={() => setActiveTab(null)}
-            activeOpacity={0.7}
-          >
+          {/* Sheet Handle Bar - Swipe / Drag down to close */}
+          <View {...panResponder.panHandlers} style={styles.sheetHandleWrap}>
             <View style={styles.sheetHandle} />
-          </TouchableOpacity>
+          </View>
 
           {/* Tab Specific Content */}
           <View style={styles.sheetBody}>
@@ -321,19 +343,21 @@ export default function MapScreen() {
         </Animated.View>
       </View>
 
-      {/* Bottom Tab Bar Dock */}
-      <BottomTabBar
-        activeTab={activeTab}
-        onSelectTab={(tab) => {
-          if (activeTab === tab) {
-            setActiveTab(null)
-          } else {
-            setActiveTab(tab)
-            if (tab === 'inspect') setMode('inspect')
-            if (tab === 'routes' && mode === 'inspect') setMode('route-address')
-          }
-        }}
-      />
+      {/* Bottom Tab Bar Dock — wrapped to extend dark bg behind Android gesture bar */}
+      <View style={styles.bottomDock}>
+        <BottomTabBar
+          activeTab={activeTab}
+          onSelectTab={(tab) => {
+            if (activeTab === tab) {
+              setActiveTab(null)
+            } else {
+              setActiveTab(tab)
+              if (tab === 'inspect') setMode('inspect')
+              if (tab === 'routes' && mode === 'inspect') setMode('route-address')
+            }
+          }}
+        />
+      </View>
 
       {/* Backend IP Settings Modal */}
       <SettingsModal
@@ -411,7 +435,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     height: SHEET_HEIGHT,
-    backgroundColor: Colors.bgSheet,
+    backgroundColor: '#04040a',
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
     borderTopWidth: 1,
@@ -439,5 +463,8 @@ const styles = StyleSheet.create({
   sheetBody: {
     flex: 1,
     paddingHorizontal: 4,
+  },
+  bottomDock: {
+    backgroundColor: '#04040a',
   },
 })

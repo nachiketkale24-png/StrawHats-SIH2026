@@ -1,8 +1,4 @@
-/**
- * Events sheet content — matches the web's "Events" mobile tab content.
- * Event date picker, refresh, time interval buttons, FSI summary stats, download link.
- */
-import React from 'react'
+import React, { useState } from 'react'
 import {
   View,
   Text,
@@ -10,8 +6,9 @@ import {
   StyleSheet,
   ScrollView,
   Linking,
+  ActivityIndicator,
 } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import { Colors, Fonts, FontSizes } from '../theme'
 import { API_BASE } from '../api/config'
 import { windowQuery } from '../api/floodApi'
@@ -35,6 +32,21 @@ interface Props {
 
 const WINDOW_VALUES = [15, 30, 60, 90, 120, 180]
 
+function formatEventLabel(dateStr: string): { title: string; subtitle: string } {
+  if (dateStr === '2023-07-26') return { title: '2023-07-26', subtitle: '26 Jul 2023 · Extreme Inundation' }
+  if (dateStr === '2020-08-04') return { title: '2020-08-04', subtitle: '04 Aug 2020 · High Precipitation' }
+  if (dateStr === '2019-09-04') return { title: '2019-09-04', subtitle: '04 Sep 2019 · Monsoon Inundation' }
+  
+  const parts = dateStr.split('-')
+  if (parts.length === 3) {
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    const mIdx = parseInt(parts[1], 10) - 1
+    const mName = monthNames[mIdx] || parts[1]
+    return { title: dateStr, subtitle: `${parts[2]} ${mName} ${parts[0]} · Historical Event` }
+  }
+  return { title: dateStr, subtitle: 'Historical Flood Dataset' }
+}
+
 export default function EventsSheet({
   events,
   event,
@@ -50,74 +62,157 @@ export default function EventsSheet({
   onSelectMinutes,
   onRefresh,
 }: Props) {
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const currentEventInfo = formatEventLabel(event || (events[0] ?? ''))
+
   return (
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
+      nestedScrollEnabled
     >
-      {/* Event selection */}
-      <View>
-        <Text style={styles.label}>HISTORICAL DATE SELECTION</Text>
-        <View style={styles.pickerRow}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.eventScrollContainer}
-            contentContainerStyle={styles.eventScroll}
-          >
-            {events.length === 0 && (
-              <Text style={styles.emptyText}>
-                {eventsLoading ? 'Loading events…' : 'No events found'}
-              </Text>
-            )}
-            {events.map((date) => (
-              <TouchableOpacity
-                key={date}
-                style={[
-                  styles.eventChip,
-                  event === date && styles.eventChipActive,
-                ]}
-                onPress={() => onSelectEvent(date)}
-                disabled={eventsLoading}
-              >
-                <Text
-                  style={[
-                    styles.eventChipText,
-                    event === date && styles.eventChipTextActive,
-                  ]}
-                >
-                  {date}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+      {/* SECTION 1: Historical Date Selection Dropdown */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeaderRow}>
+          <View style={styles.sectionTitleWrap}>
+            <Ionicons name="calendar" size={13} color={Colors.gold} />
+            <Text style={styles.sectionTitle}>HISTORICAL FLOOD EVENT</Text>
+          </View>
+          {eventsLoading && (
+            <View style={styles.loadingPill}>
+              <ActivityIndicator size="small" color={Colors.gold} />
+              <Text style={styles.loadingPillText}>UPDATING</Text>
+            </View>
+          )}
+        </View>
 
+        {/* Dropdown Selector Row */}
+        <View style={styles.dropdownRow}>
+          <TouchableOpacity
+            style={[styles.dropdownTrigger, dropdownOpen && styles.dropdownTriggerActive]}
+            onPress={() => setDropdownOpen((prev) => !prev)}
+            activeOpacity={0.8}
+            disabled={eventsLoading || events.length === 0}
+          >
+            <View style={styles.dropdownLeft}>
+              <View style={styles.calendarIconBox}>
+                <Ionicons name="calendar-outline" size={16} color={Colors.gold} />
+              </View>
+              <View style={styles.dropdownTextWrap}>
+                <Text style={styles.dropdownDateText}>
+                  {event || (eventsLoading ? 'Loading events...' : 'Select an event date')}
+                </Text>
+                <Text style={styles.dropdownSubtext} numberOfLines={1}>
+                  {event ? currentEventInfo.subtitle : 'Choose historical rainfall timeline'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.chevronBox}>
+              <Ionicons
+                name={dropdownOpen ? 'chevron-up' : 'chevron-down'}
+                size={16}
+                color={Colors.gold}
+              />
+            </View>
+          </TouchableOpacity>
+
+          {/* Refresh Button */}
           <TouchableOpacity
             style={styles.refreshBtn}
             onPress={onRefresh}
             disabled={eventsLoading}
+            activeOpacity={0.7}
           >
             <Ionicons
               name="refresh"
-              size={16}
-              color={eventsLoading ? Colors.textSecondary : Colors.goldLight}
+              size={17}
+              color={eventsLoading ? Colors.textSecondary : Colors.gold}
             />
           </TouchableOpacity>
         </View>
+
+        {/* Dropdown Menu Options */}
+        {dropdownOpen && (
+          <View style={styles.dropdownMenu}>
+            {events.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>
+                  {eventsLoading ? 'Loading historical events…' : 'No events available'}
+                </Text>
+              </View>
+            ) : (
+              events.map((dateStr, idx) => {
+                const info = formatEventLabel(dateStr)
+                const isSelected = event === dateStr
+                return (
+                  <TouchableOpacity
+                    key={dateStr}
+                    style={[
+                      styles.dropdownItem,
+                      isSelected && styles.dropdownItemActive,
+                      idx === events.length - 1 && styles.dropdownItemLast,
+                    ]}
+                    onPress={() => {
+                      onSelectEvent(dateStr)
+                      setDropdownOpen(false)
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.dropdownItemLeft}>
+                      <View
+                        style={[
+                          styles.radioDot,
+                          isSelected && styles.radioDotActive,
+                        ]}
+                      >
+                        {isSelected && <View style={styles.radioDotInner} />}
+                      </View>
+                      <View style={styles.itemTextWrap}>
+                        <Text
+                          style={[
+                            styles.itemDateText,
+                            isSelected && styles.itemDateTextActive,
+                          ]}
+                        >
+                          {info.title}
+                        </Text>
+                        <Text style={styles.itemSubText}>{info.subtitle}</Text>
+                      </View>
+                    </View>
+
+                    {isSelected && (
+                      <View style={styles.checkBadge}>
+                        <Ionicons name="checkmark" size={14} color={Colors.goldLight} />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                )
+              })
+            )}
+          </View>
+        )}
       </View>
 
-      {/* Time intervals */}
-      <View>
-        <View style={styles.labelRow}>
-          <Text style={styles.label}>ACCUMULATION WINDOW</Text>
+      {/* SECTION 2: Accumulation Window Buttons */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeaderRow}>
+          <View style={styles.sectionTitleWrap}>
+            <MaterialCommunityIcons name="clock-outline" size={13} color={Colors.cyan} />
+            <Text style={styles.sectionTitle}>ACCUMULATION WINDOW</Text>
+          </View>
+
           {activeWindow && (
-            <Text style={styles.windowTime}>
-              {activeWindow.start_time.slice(11, 16)} →{' '}
-              {activeWindow.end_time.slice(11, 16)}
-            </Text>
+            <View style={styles.timeRangePill}>
+              <View style={styles.timeRangeDot} />
+              <Text style={styles.timeRangeText}>
+                {activeWindow.start_time.slice(11, 16)} → {activeWindow.end_time.slice(11, 16)}
+              </Text>
+            </View>
           )}
         </View>
+
         <View style={styles.intervalGrid}>
           {WINDOW_VALUES.map((val) => {
             const available = windows?.windows.some((w) => w.minutes === val)
@@ -132,6 +227,7 @@ export default function EventsSheet({
                 ]}
                 onPress={() => onSelectMinutes(val)}
                 disabled={disabled || !available}
+                activeOpacity={0.7}
               >
                 <Text
                   style={[
@@ -141,38 +237,58 @@ export default function EventsSheet({
                 >
                   {val} min
                 </Text>
+                {isActive && <View style={styles.intervalActiveDot} />}
               </TouchableOpacity>
             )
           })}
         </View>
       </View>
 
-      {/* FSI Stats */}
+      {/* SECTION 3: Event Summary Index Stats */}
       {summary && (
-        <View style={styles.statsContainer}>
-          <Text style={styles.statsTitle}>EVENT SUMMARY INDEX</Text>
-          <View style={styles.statsGrid}>
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>MIN</Text>
-              <Text style={styles.statValue}>{summary.fsi_min.toFixed(2)}</Text>
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <View style={styles.sectionTitleWrap}>
+              <MaterialCommunityIcons name="chart-bar" size={13} color={Colors.gold} />
+              <Text style={styles.sectionTitle}>EVENT SUMMARY INDEX</Text>
             </View>
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>MEAN</Text>
-              <Text style={[styles.statValue, { color: Colors.cyanPrimary }]}>
-                {summary.fsi_mean.toFixed(2)}
-              </Text>
+            <View style={styles.fsiPill}>
+              <Text style={styles.fsiPillText}>FSI SCALE 0 - 1</Text>
             </View>
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>MAX</Text>
-              <Text style={[styles.statValue, { color: Colors.amber400 }]}>
-                {summary.fsi_max.toFixed(2)}
-              </Text>
+          </View>
+
+          <View style={styles.statsCard}>
+            <View style={styles.statsGrid}>
+              {/* MIN */}
+              <View style={styles.statBox}>
+                <Text style={styles.statLabel}>MIN RISK</Text>
+                <Text style={styles.statValueMin}>{summary.fsi_min.toFixed(2)}</Text>
+                <Text style={styles.statSubLabel}>Baseline</Text>
+              </View>
+
+              <View style={styles.statDivider} />
+
+              {/* MEAN */}
+              <View style={styles.statBox}>
+                <Text style={styles.statLabel}>AVG FSI</Text>
+                <Text style={styles.statValueMean}>{summary.fsi_mean.toFixed(2)}</Text>
+                <Text style={styles.statSubLabel}>Citywide</Text>
+              </View>
+
+              <View style={styles.statDivider} />
+
+              {/* MAX */}
+              <View style={styles.statBox}>
+                <Text style={styles.statLabel}>PEAK FSI</Text>
+                <Text style={styles.statValueMax}>{summary.fsi_max.toFixed(2)}</Text>
+                <Text style={styles.statSubLabel}>Critical</Text>
+              </View>
             </View>
           </View>
         </View>
       )}
 
-      {/* Download link */}
+      {/* SECTION 4: Download GeoTIFF Action Button */}
       {intervalReady && (
         <TouchableOpacity
           style={styles.downloadBtn}
@@ -180,9 +296,13 @@ export default function EventsSheet({
             const url = `${API_BASE}/flood/raster/${encodeURIComponent(event)}${windowQuery(selectedMinutes)}`
             Linking.openURL(url)
           }}
+          activeOpacity={0.8}
         >
-          <Ionicons name="download-outline" size={14} color={Colors.goldLight} />
+          <View style={styles.downloadIconWrap}>
+            <Ionicons name="download-outline" size={15} color={Colors.goldLight} />
+          </View>
           <Text style={styles.downloadText}>Download FSI GeoTIFF</Text>
+          <Ionicons name="arrow-forward" size={13} color={Colors.goldLight} style={{ opacity: 0.8 }} />
         </TouchableOpacity>
       )}
     </ScrollView>
@@ -190,155 +310,390 @@ export default function EventsSheet({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { gap: 16, paddingBottom: 24 },
-  label: {
-    fontFamily: Fonts.hud,
-    fontSize: FontSizes.xs,
-    fontWeight: '600',
-    letterSpacing: 1.4,
-    color: Colors.textSecondary,
-    marginBottom: 6,
+  container: {
+    flex: 1,
+    backgroundColor: 'transparent',
   },
-  labelRow: {
+  content: {
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    paddingBottom: 28,
+    gap: 14,
+  },
+  section: {
+    gap: 7,
+  },
+  sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 6,
+    paddingHorizontal: 2,
   },
-  windowTime: {
-    fontFamily: Fonts.hud,
-    fontSize: FontSizes.xs,
-    color: Colors.goldLight,
-  },
-  pickerRow: {
+  sectionTitleWrap: {
     flexDirection: 'row',
-    gap: 8,
     alignItems: 'center',
+    gap: 6,
   },
-  eventScrollContainer: { flex: 1 },
-  eventScroll: { gap: 6 },
-  emptyText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    paddingVertical: 8,
-  },
-  eventChip: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.borderPrimary,
-    backgroundColor: Colors.bgPrimary,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  eventChipActive: {
-    borderColor: Colors.goldPrimary,
-    backgroundColor: 'rgba(212,175,55,0.15)',
-  },
-  eventChipText: {
-    fontFamily: Fonts.hud,
-    fontSize: 13,
-    fontWeight: '500',
-    color: Colors.textPrimary,
-  },
-  eventChipTextActive: {
-    color: Colors.goldLight,
+  sectionTitle: {
+    fontFamily: Fonts.monoBold,
+    fontSize: 10,
     fontWeight: '700',
+    letterSpacing: 0.8,
+    color: Colors.textSecondary,
+    textTransform: 'uppercase',
   },
-  refreshBtn: {
-    height: 44,
-    width: 44,
-    borderRadius: 8,
+  loadingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(212,175,55,0.1)',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  loadingPillText: {
+    fontFamily: Fonts.monoBold,
+    fontSize: 8.5,
+    color: Colors.gold,
+  },
+  dropdownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dropdownTrigger: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#060710',
     borderWidth: 1,
-    borderColor: Colors.borderSecondary,
-    backgroundColor: Colors.bgPrimary,
+    borderColor: 'rgba(212,175,55,0.25)',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  dropdownTriggerActive: {
+    borderColor: Colors.gold,
+    backgroundColor: '#04040a',
+    borderBottomLeftRadius: 4,
+    borderBottomRightRadius: 4,
+  },
+  dropdownLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minWidth: 0,
+  },
+  calendarIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: 'rgba(212,175,55,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(212,175,55,0.25)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  dropdownTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  dropdownDateText: {
+    fontFamily: Fonts.monoBold,
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.textHeading,
+    letterSpacing: 0.5,
+  },
+  dropdownSubtext: {
+    fontFamily: Fonts.body,
+    fontSize: 10.5,
+    color: Colors.textSecondary,
+    marginTop: 1,
+  },
+  chevronBox: {
+    paddingLeft: 6,
+  },
+  refreshBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: '#060710',
+    borderWidth: 1,
+    borderColor: 'rgba(212,175,55,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  dropdownMenu: {
+    backgroundColor: '#04040a',
+    borderWidth: 1,
+    borderColor: 'rgba(212,175,55,0.3)',
+    borderRadius: 10,
+    marginTop: 2,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  dropdownItemLast: {
+    borderBottomWidth: 0,
+  },
+  dropdownItemActive: {
+    backgroundColor: 'rgba(212,175,55,0.12)',
+  },
+  dropdownItemLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  radioDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 1.5,
+    borderColor: Colors.textSecondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioDotActive: {
+    borderColor: Colors.gold,
+  },
+  radioDotInner: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.gold,
+  },
+  itemTextWrap: {
+    flex: 1,
+  },
+  itemDateText: {
+    fontFamily: Fonts.monoBold,
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
+  itemDateTextActive: {
+    color: Colors.goldLight,
+  },
+  itemSubText: {
+    fontFamily: Fonts.body,
+    fontSize: 10.5,
+    color: Colors.textSecondary,
+    marginTop: 1,
+  },
+  checkBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(212,175,55,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyContainer: {
+    padding: 16,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontFamily: Fonts.mono,
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  timeRangePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(0,229,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,229,255,0.25)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+  },
+  timeRangeDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: Colors.cyan,
+  },
+  timeRangeText: {
+    fontFamily: Fonts.monoBold,
+    fontSize: 10,
+    color: Colors.cyan,
+    fontWeight: '700',
   },
   intervalGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 7,
   },
   intervalBtn: {
-    flex: 1,
-    minWidth: '30%',
+    flexBasis: '31.5%',
+    flexGrow: 1,
     height: 40,
-    borderRadius: 8,
+    borderRadius: 9,
     borderWidth: 1,
-    borderColor: Colors.borderSecondary,
-    backgroundColor: Colors.bgPrimary,
+    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: '#060710',
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
   },
   intervalBtnActive: {
-    borderColor: Colors.goldPrimary,
-    backgroundColor: Colors.goldPrimary,
+    borderColor: Colors.gold,
+    backgroundColor: 'rgba(212,175,55,0.18)',
+    borderWidth: 1.5,
   },
   intervalBtnDisabled: {
-    opacity: 0.4,
+    opacity: 0.35,
   },
   intervalBtnText: {
-    fontFamily: Fonts.hud,
-    fontSize: 12,
-    fontWeight: '600',
+    fontFamily: Fonts.monoBold,
+    fontSize: 11.5,
+    fontWeight: '700',
     color: Colors.textSecondary,
+    letterSpacing: 0.2,
   },
   intervalBtnTextActive: {
-    color: Colors.bgPrimary,
-    fontWeight: '700',
+    color: Colors.goldLight,
+    fontWeight: '800',
   },
-  statsContainer: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.borderSecondary,
-    backgroundColor: Colors.bgPrimary,
-    padding: 12,
+  intervalActiveDot: {
+    position: 'absolute',
+    top: 5,
+    right: 6,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.gold,
   },
-  statsTitle: {
-    fontFamily: Fonts.hud,
-    fontSize: FontSizes.xxs,
-    letterSpacing: 1.2,
+  fsiPill: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  fsiPillText: {
+    fontFamily: Fonts.mono,
+    fontSize: 8.5,
     color: Colors.textSecondary,
-    marginBottom: 8,
+  },
+  statsCard: {
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: 'rgba(212,175,55,0.2)',
+    backgroundColor: '#060710',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   statsGrid: {
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   statBox: {
     flex: 1,
-    borderRadius: 8,
-    backgroundColor: Colors.bgSecondary,
-    padding: 8,
     alignItems: 'center',
   },
+  statDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
   statLabel: {
-    fontFamily: Fonts.hud,
-    fontSize: FontSizes.xxs,
+    fontFamily: Fonts.monoBold,
+    fontSize: 9,
     color: Colors.textSecondary,
+    letterSpacing: 0.6,
     marginBottom: 2,
   },
-  statValue: {
-    fontFamily: Fonts.hud,
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.textPrimary,
+  statValueMin: {
+    fontFamily: Fonts.monoBold,
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#94a3b8',
+  },
+  statValueMean: {
+    fontFamily: Fonts.monoBold,
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.cyan,
+  },
+  statValueMax: {
+    fontFamily: Fonts.monoBold,
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#fbbf24',
+  },
+  statSubLabel: {
+    fontFamily: Fonts.body,
+    fontSize: 9.5,
+    color: 'rgba(155,151,142,0.7)',
+    marginTop: 1,
   },
   downloadBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.4)',
-    backgroundColor: 'rgba(212,175,55,0.1)',
-    paddingVertical: 12,
+    borderColor: 'rgba(212,175,55,0.35)',
+    backgroundColor: 'rgba(212,175,55,0.08)',
+    paddingVertical: 11,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  downloadIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: 'rgba(212,175,55,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   downloadText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontFamily: Fonts.monoBold,
+    fontSize: 11.5,
+    fontWeight: '700',
     color: Colors.goldLight,
+    letterSpacing: 0.4,
   },
 })

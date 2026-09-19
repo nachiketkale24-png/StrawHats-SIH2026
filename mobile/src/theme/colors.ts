@@ -17,9 +17,9 @@ export const Colors = {
   // Backgrounds
   bgVoid: '#04040a',
   bgPrimary: '#06060c',
-  bgSecondary: '#0c0e1a',
-  bgPanel: 'rgba(12, 14, 26, 0.94)',
-  bgSheet: 'rgba(10, 12, 22, 0.98)',
+  bgSecondary: '#060710',
+  bgPanel: 'rgba(8, 10, 20, 0.95)',
+  bgSheet: '#04040a',
 
   // Flood depth scale
   depthLow: '#54768a',
