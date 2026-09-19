@@ -2,6 +2,7 @@ import numpy as np
 import rasterio
 from rasterio.warp import reproject, Resampling
 from pathlib import Path
+import geopandas as gpd
 
 root = Path('data')
 raw = root / 'raw'
@@ -32,4 +33,24 @@ profile.update(count=2, dtype='float32', nodata=-9999.0)
 with rasterio.open(out / 'landcover_features.tif', 'w', **profile) as dst:
     dst.write(built, 1)
     dst.write(water, 2)
-print('created', dem_out, out / 'landcover_features.tif')
+
+# Routing uses a GeoPackage rather than the raw OSM PBF.  Keep only roads that
+# can carry vehicles; paths, footways and cycleways would create invalid routes.
+roads_pbf = raw / 'western-zone-260904.osm.pbf'
+roads_out = out / 'mumbai_vehicle_roads.gpkg'
+vehicle_highways = {
+    'motorway', 'trunk', 'primary', 'secondary', 'tertiary',
+    'unclassified', 'residential', 'living_street', 'service',
+}
+if roads_pbf.exists():
+    print('Extracting vehicle roads from', roads_pbf, flush=True)
+    roads = gpd.read_file(roads_pbf, layer='lines')
+    roads = roads[
+        roads['highway'].isin(vehicle_highways)
+        & roads.geometry.notna()
+        & ~roads.geometry.is_empty
+    ].copy()
+    roads.to_file(roads_out, driver='GPKG')
+    print('created', dem_out, out / 'landcover_features.tif', roads_out)
+else:
+    print('created', dem_out, out / 'landcover_features.tif')

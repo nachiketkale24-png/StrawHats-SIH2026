@@ -20,8 +20,14 @@ def get_windows(event_date):
     if not path.exists():
         return {"event_date": event_date, "windows": []}
     manifest = json.loads(path.read_text(encoding="utf-8"))
+    # A window is selectable in the connected map only when it can provide
+    # both flood data and flood-aware routing.  Older manifests may contain
+    # raster-only windows created before the road graph was available.
     manifest["windows"] = [window for window in manifest["windows"]
-        if config.flood_risk_tif(f"{event_date}_{window['minutes']}min").exists()]
+        if (
+            config.flood_risk_tif(f"{event_date}_{window['minutes']}min").exists()
+            and config.road_graph_pickle(f"{event_date}_{window['minutes']}min").exists()
+        )]
     return manifest
 
 
