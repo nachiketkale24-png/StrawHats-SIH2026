@@ -21,7 +21,7 @@ The supplied intermediates `mumbai_dem_clipped.tif`, `landcover_features.tif`, a
 Start the API server:
 
 ```sh
-uvicorn backend.main:app --reload --port 8000
+uvicorn backend.main:app --reload --port 8001
 ```
 
 Run the pipeline at least once before the backend has event data to serve. The backend reads precomputed `data/processed/flood_risk_<event_date>.tif` and `data/processed/mumbai_road_graph_<event_date>.gpickle` files. It never recomputes these outputs live; route requests compute paths using the precomputed graph.
@@ -57,3 +57,33 @@ Use `GET /flood/windows/{event_date}` to discover intervals; pass
 `"window_minutes": 15` in a route request. Existing daily files and daily requests
 remain supported. Dates generated only by the interval pipeline require a duration.
 Restart the API after source changes.
+
+## Leakage-safe rainfall nowcasting
+
+`python -m pipeline.train_nowcaster` trains one joint, rainfall-only LSTM with
+input/output shape `12 x 37`: 12 known 15-minute station readings (three hours)
+produce the next 12 readings. The split is time-ordered (train through 2020,
+validation 2021, held-out test 2022) and the per-station min/max scaler is fit
+only on training readings. It writes the model, scaler and lead-time metrics to
+`models/`.
+
+`python -m pipeline.run_nowcast_intervals --event-date 2020-09-23` replays a
+historical reference time but reads only the three preceding observed hours; it
+then sends predicted station totals through the existing unchanged IDW
+interpolation, FSI, coverage-mask, road-risk, and routing steps. The resulting
+outputs are explicitly `nowcast` artifacts. Existing `observed` artifacts remain
+an offline, perfect-knowledge comparison mode and must not be presented as a
+forecast. The API accepts `rainfall_source=nowcast` on event/window/raster/point
+requests, and `rainfall_source: "nowcast"` in route requests.
+
+For a future live deployment, replace the historical workbook replay with a
+live-gauge adapter that provides the same 12 timestamped station readings to
+`get_predicted_window_totals`; the model and all spatial downstream logic stay
+unchanged.
+
+### Attribution
+
+The joint LSTM workflow and architecture were adapted from
+[omkarnitsureiitb/Mumbai_RainFall_Forecasting](https://github.com/omkarnitsureiitb/Mumbai_RainFall_Forecasting),
+copyright 2024 Omkar Nitsure, under the MIT License. The unmodified license text
+is retained in `THIRD_PARTY_LICENSES/Mumbai_RainFall_Forecasting_LICENSE`.

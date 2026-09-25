@@ -11,3 +11,4 @@ networkx
 rasterstats
 shapely
 openpyxl
+torch

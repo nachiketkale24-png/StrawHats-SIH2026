@@ -1,6 +1,6 @@
-from typing import List, Optional
+from typing import List, Literal, Optional
 from pydantic import BaseModel
-from backend.services.event_windows import WindowMinutes
+from backend.services.event_windows import RainfallSource, WindowMinutes
 
 
 class EventInfo(BaseModel):
@@ -17,6 +17,8 @@ class RouteRequest(BaseModel):
     dest_lat: float
     dest_lon: float
     event_date: str
+    rainfall_source: RainfallSource = RainfallSource.OBSERVED
+    risk_tolerance: Literal["low", "medium", "high", "severe"] = "low"
 
 
 class RouteSummary(BaseModel):
@@ -29,9 +31,18 @@ class RouteSummary(BaseModel):
 class RouteResponse(BaseModel):
     event_date: str
     normal_route: RouteSummary
+    normal_distance_km: float
     flood_aware_route: RouteSummary
+    flood_aware_distance_km: float
     extra_distance_m: float
     extra_distance_pct: float
+    detour_pct: float
+    tolerance_route: dict
+    tolerance_distance_km: float
+    risk_tolerance: Literal["low", "medium", "high", "severe"]
+    max_risk_on_route: float
+    high_severe_segment_count: int
+    warning: Optional[str] = None
 
 
 class ScenarioRequest(BaseModel):

@@ -1,6 +1,6 @@
 import type { GeoJSONSource, Map } from 'maplibre-gl'
 import { fromArrayBuffer } from 'geotiff'
-import { apiRequest, windowQuery } from './floodApi'
+import { apiRequest, type RainfallSource, windowQuery } from './floodApi'
 import type { RouteComparison } from './floodApi'
 import type { RoutePoint } from '../types/flood'
 import { projectRaster } from './rasterProjection'
@@ -18,7 +18,7 @@ export function addEventLayers(map: Map) {
   map.addLayer({ id: 'route-labels', type: 'symbol', source: 'route-points', layout: { 'text-field': ['get', 'label'], 'text-size': 12, 'text-allow-overlap': true }, paint: { 'text-color': '#ffffff' } })
 }
 export function updateEventRoutes(map: Map, points: RoutePoint[], routes: RouteComparison | null) {
-  for (const [id, route] of [['normal-route', routes?.normal_route], ['safe-route', routes?.flood_aware_route]] as const) {
+  for (const [id, route] of [['normal-route', routes?.normal_route], ['safe-route', routes?.tolerance_route]] as const) {
     map.getSource<GeoJSONSource>(id)?.setData({ type: 'FeatureCollection', features: route && route.coordinates.length > 1 ? [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: route.coordinates } }] : [] })
   }
   map.getSource<GeoJSONSource>('route-points')?.setData({ type: 'FeatureCollection', features: points.map((point, index) => ({ type: 'Feature', properties: { label: index === 0 ? 'A' : 'B' }, geometry: { type: 'Point', coordinates: [point.lng, point.lat] } })) })
@@ -60,8 +60,8 @@ function imageCoordinates(bounds: RasterBounds) {
   const [west, south, east, north] = bounds
   return { url: '', coordinates: [[west, north], [east, north], [east, south], [west, south]] as [[number, number], [number, number], [number, number], [number, number]] }
 }
-export async function loadEventRaster(event: string, signal: AbortSignal, minutes?: number) {
-  const { values, width, height, bounds, nodata } = await readAlignedRaster(`/flood/raster/${encodeURIComponent(event)}${windowQuery(minutes)}`, signal)
+export async function loadEventRaster(event: string, signal: AbortSignal, minutes: number | undefined, rainfallSource: RainfallSource) {
+  const { values, width, height, bounds, nodata } = await readAlignedRaster(`/flood/raster/${encodeURIComponent(event)}${windowQuery(minutes, rainfallSource)}`, signal)
   const url = canvasFromPixels(width, height, pixels => {
     for (let i = 0; i < width * height; i++) {
       const value = Number(values[i])

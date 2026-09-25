@@ -21,7 +21,7 @@ if _parent not in sys.path:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.routers import flood, routing
+from backend.routers import drainage, flood, routing
 
 app = FastAPI(
     title="Mumbai Flood Prototype API",
@@ -39,6 +39,7 @@ app.add_middleware(
 
 app.include_router(flood.router)
 app.include_router(routing.router)
+app.include_router(drainage.router)
 
 
 @app.get("/")

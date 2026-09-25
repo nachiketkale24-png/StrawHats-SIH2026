@@ -1,5 +1,5 @@
 """
-Attaches flood risk (from the FSI raster) to each road segment, and computes
+Attaches flood risk (from the integrated risk raster) to each road segment, and computes
 the final edge weights the backend's routing service will load directly.
 
 This is the critical handoff step: everything the backend needs for routing
@@ -15,7 +15,8 @@ from . import config
 from .road_graph_builder import graph_to_edges_gdf
 
 
-def attach_flood_risk(G, roads_m_crs, flood_risk_tif_path, buffer_m=config.ROAD_BUFFER_METERS):
+def attach_flood_risk(G, roads_m_crs, integrated_flood_risk_tif_path,
+                      buffer_m=config.ROAD_BUFFER_METERS):
     """
     Mutates G in place: adds `flood_risk`, `weight_normal`, and
     `weight_flood_aware` to every edge.
@@ -27,7 +28,7 @@ def attach_flood_risk(G, roads_m_crs, flood_risk_tif_path, buffer_m=config.ROAD_
     edges_buffered_wgs84 = edges_buffered.to_crs(config.WGS84)
 
     stats = zonal_stats(
-        edges_buffered_wgs84, str(flood_risk_tif_path),
+        edges_buffered_wgs84, str(integrated_flood_risk_tif_path),
         stats=["max"], nodata=config.NODATA_VAL,
     )
     edges_gdf["flood_risk_max"] = [s["max"] if s["max"] is not None else 0.0 for s in stats]

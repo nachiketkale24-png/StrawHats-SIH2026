@@ -1,7 +1,6 @@
 import type { ExpressionSpecification, GeoJSONSource, Map } from 'maplibre-gl'
 import type { ForecastFrame, MockFloodData, RouteCollection, RouteMarkers, RoutePoint, RouteResult } from '../types/flood'
 import { addHeatmapLayers } from './heatmapLayers'
-import { addDrainageEdges } from './drainageLayers'
 
 function color(variable: string) { return getComputedStyle(document.documentElement).getPropertyValue(variable).trim() }
 export function addFloodLayers(map: Map, data: MockFloodData) {
@@ -11,12 +10,6 @@ export function addFloodLayers(map: Map, data: MockFloodData) {
   addHeatmapLayers(map)
   if (!map.getSource('mumbai-roads')) map.addSource('mumbai-roads', { type: 'geojson', data: data.frames[0].roads })
   if (!map.getLayer('roads-flood')) map.addLayer({ id: 'roads-flood', type: 'line', source: 'mumbai-roads', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': depthColor, 'line-width': 4 } })
-  addDrainageEdges(map, data)
-  if (!map.getSource('drainage-nodes')) map.addSource('drainage-nodes', { type: 'geojson', promoteId: 'id', data: data.drainage })
-  if (!map.getLayer('drainage-nodes')) map.addLayer({ id: 'drainage-nodes', type: 'circle', source: 'drainage-nodes', paint: {
-    'circle-color': ['match', ['get', 'status'], 'normal', color('--status-normal'), 'strained', color('--capacity-amber'), color('--capacity-red')],
-    'circle-radius': 6, 'circle-stroke-width': 2, 'circle-stroke-color': color('--bg-primary'),
-  } })
   if (!map.getSource('route-line')) map.addSource('route-line', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
   if (!map.getLayer('route-line')) map.addLayer({ id: 'route-line', type: 'line', source: 'route-line', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': color('--cyan-primary'), 'line-width': 5, 'line-opacity': 0.9 } })
   if (!map.getSource('route-points')) map.addSource('route-points', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })

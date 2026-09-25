@@ -1,6 +1,44 @@
 import type { MapMode, RoutePoint, RouteResult } from '../types/flood'
 import Panel, { PanelCaption, PanelLabel } from './ui/Panel'
 
+export type RiskTolerance = 'low' | 'medium' | 'high' | 'severe'
+
+export const RISK_TOLERANCE_OPTIONS: { value: RiskTolerance; label: string }[] = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'severe', label: 'Severe' },
+]
+
+interface RiskToleranceSelectorProps {
+  value: RiskTolerance
+  onChange: (value: RiskTolerance) => void
+  disabled: boolean
+}
+
+// Shared with the API-backed route panel so it follows the existing forecast
+// segmented-button pattern instead of introducing another control style.
+export function RiskToleranceSelector({ value, onChange, disabled }: RiskToleranceSelectorProps) {
+  return <div className="mt-3" aria-live="polite">
+    <PanelLabel className="mb-2">Flood risk tolerance</PanelLabel>
+    <div className="flex gap-1" role="group" aria-label="Flood risk tolerance">
+      {RISK_TOLERANCE_OPTIONS.map(option => (
+        <button
+          key={option.value}
+          type="button"
+          className="hud-button flex-1 px-2 py-2 text-xs"
+          disabled={disabled}
+          aria-pressed={option.value === value}
+          onClick={() => onChange(option.value)}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+    {value === 'severe' && <PanelCaption className="mt-1.5">Close to the fastest route because no flood risk is being avoided.</PanelCaption>}
+  </div>
+}
+
 interface Props {
   mode: MapMode
   onModeChange: (mode: MapMode) => void

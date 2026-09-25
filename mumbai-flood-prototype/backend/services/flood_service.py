@@ -11,7 +11,7 @@ from pathlib import Path
 import rasterio
 
 from pipeline import config
-from .event_windows import get_windows
+from .event_windows import RainfallSource, get_windows
 
 
 class FloodService:
@@ -19,17 +19,24 @@ class FloodService:
         self._raster_cache = {}  # event_date -> (array, transform, crs, nodata)
         self._coverage = None
 
-    def list_available_events(self):
-        pattern = str(config.DATA_PROCESSED_DIR / "flood_risk_*.tif")
+    def list_available_events(self, rainfall_source: RainfallSource = RainfallSource.OBSERVED):
+        source = RainfallSource(rainfall_source)
+        pattern = str(config.DATA_PROCESSED_DIR / (
+            "flood_risk_nowcast_*.tif" if source is RainfallSource.NOWCAST else "flood_risk_*.tif"
+        ))
         files = glob.glob(pattern)
         events = []
         for f in files:
-            match = re.search(r"flood_risk_(\d{4}-\d{2}-\d{2})\.tif", f)
+            expression = (r"flood_risk_nowcast_(\d{4}-\d{2}-\d{2})_\d+min\.tif"
+                          if source is RainfallSource.NOWCAST else r"flood_risk_(\d{4}-\d{2}-\d{2})\.tif")
+            match = re.search(expression, f)
             if match:
                 events.append(match.group(1))
-        for path in config.DATA_PROCESSED_DIR.glob('event_windows_*.json'):
-            event = path.stem.removeprefix('event_windows_')
-            if get_windows(event)['windows']:
+        manifest_glob = 'nowcast_event_windows_*.json' if source is RainfallSource.NOWCAST else 'event_windows_*.json'
+        manifest_prefix = 'nowcast_event_windows_' if source is RainfallSource.NOWCAST else 'event_windows_'
+        for path in config.DATA_PROCESSED_DIR.glob(manifest_glob):
+            event = path.stem.removeprefix(manifest_prefix)
+            if get_windows(event, source)['windows']:
                 events.append(event)
         return sorted(set(events))
 

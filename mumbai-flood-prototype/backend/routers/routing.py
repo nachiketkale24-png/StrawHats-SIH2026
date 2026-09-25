@@ -10,16 +10,17 @@ router = APIRouter(prefix="/route", tags=["routing"])
 @router.post("", response_model=RouteResponse)
 def get_route(req: RouteRequest):
     """
-    Computes both the normal (shortest) route and the flood-aware route
-    for a given event, and returns both for direct comparison.
+    Computes the normal (fastest) route and a route adapted to the requested
+    flood-risk tolerance for a given event.
     """
     try:
         result = routing_service.compute_routes(
-            event_date=event_key(req.event_date, req.window_minutes),
+            event_date=event_key(req.event_date, req.window_minutes, req.rainfall_source),
             origin_lat=req.origin_lat,
             origin_lon=req.origin_lon,
             dest_lat=req.dest_lat,
             dest_lon=req.dest_lon,
+            risk_tolerance=req.risk_tolerance,
         )
         result['event_date'] = req.event_date
         return RouteResponse(**result)

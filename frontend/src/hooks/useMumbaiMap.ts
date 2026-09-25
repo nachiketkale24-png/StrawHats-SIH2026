@@ -4,6 +4,7 @@ import * as maplibregl from 'maplibre-gl'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import { MUMBAI_BOUNDS } from '../config/mumbai'
 import { addEventLayers } from '../lib/eventLayers'
+import { addDrainageLayers } from '../lib/drainageLayers'
 
 // MapLibre 6 needs an explicit bundled worker URL when used with Vite.
 maplibregl.setWorkerUrl(workerUrl)
@@ -16,6 +17,7 @@ export function useMumbaiMap(
 ) {
   useEffect(() => {
     if (!containerRef.current) return
+    setReady(false)
     let map: maplibregl.Map
     try {
       map = new maplibregl.Map({
@@ -59,6 +61,7 @@ export function useMumbaiMap(
         },
       })
 
+      addDrainageLayers(map)
       addEventLayers(map)
       setError(null)
       setReady(true)
@@ -74,6 +77,7 @@ export function useMumbaiMap(
       map.off('load', onLoad)
       resize.disconnect()
       mapRef.current = null
+      setReady(false)
       map.remove()
     }
   }, [containerRef, mapRef, setReady, setError])
