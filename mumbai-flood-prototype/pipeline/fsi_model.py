@@ -24,16 +24,18 @@ zero) — that's the correct behavior: "avoid flood risk", not "avoid rain".
 
 import numpy as np
 import rasterio
+from pathlib import Path
 
 from . import config
 
 
-def normalize(arr, mask):
-    v = arr[mask]
-    rng = v.max() - v.min()
+def normalize(arr, mask, value_range=None):
+    """Normalize valid values, optionally using a shared (min, max) range."""
+    minimum, maximum = value_range if value_range is not None else (arr[mask].min(), arr[mask].max())
+    rng = maximum - minimum
     if rng < 1e-9:
         return np.zeros_like(arr, dtype=np.float32)
-    return np.clip((arr - v.min()) / (rng + 1e-9), 0, 1)
+    return np.clip((arr - minimum) / (rng + 1e-9), 0, 1)
 
 
 def compute_vulnerability(built_up, slope_deg, water_wetland_mangrove, valid_mask):
@@ -58,7 +60,8 @@ def compute_vulnerability(built_up, slope_deg, water_wetland_mangrove, valid_mas
     return np.clip(vulnerability, 0, 1)
 
 
-def compute_fsi(rainfall_grid, vulnerability, valid_mask, vulnerability_floor=0.05):
+def compute_fsi(rainfall_grid, vulnerability, valid_mask, vulnerability_floor=0.05,
+                rainfall_range=None):
     """
     Combines a (possibly time-windowed) rainfall grid with the precomputed,
     static vulnerability layer multiplicatively.
@@ -68,7 +71,7 @@ def compute_fsi(rainfall_grid, vulnerability, valid_mask, vulnerability_floor=0.
     rainfall. Kept small (default 0.05) so it doesn't reintroduce the
     "rainfall alone drives everything" problem this rewrite is fixing.
     """
-    rainfall_factor = normalize(rainfall_grid, valid_mask)
+    rainfall_factor = normalize(rainfall_grid, valid_mask, rainfall_range)
 
     effective_vulnerability = vulnerability_floor + (1 - vulnerability_floor) * vulnerability
     fsi = rainfall_factor * effective_vulnerability
@@ -81,17 +84,24 @@ def compute_fsi(rainfall_grid, vulnerability, valid_mask, vulnerability_floor=0.
     return fsi_out, fsi_cat
 
 
+def integrate_flood_risk(fsi, surface_indicator):
+    """Use the same additive drainage contribution for daily and interval risk."""
+    return np.clip(fsi + config.W_DRAINAGE_IN_RISK * surface_indicator, 0, 1)
+
+
 def save_raster(array, valid_mask, transform, crs, out_path, band_name, apply_nodata_mask=True):
     height, width = array.shape
     out = np.where(valid_mask, array, config.NODATA_VAL) if apply_nodata_mask else array
+    temporary = Path(out_path).with_suffix('.tif.tmp')
 
     with rasterio.open(
-        out_path, "w", driver="GTiff", height=height, width=width,
+        temporary, "w", driver="GTiff", height=height, width=width,
         count=1, dtype="float32", crs=crs, transform=transform,
         nodata=config.NODATA_VAL,
     ) as dst:
         dst.write(out.astype(np.float32), 1)
         dst.set_band_description(1, band_name)
+    temporary.replace(out_path)
 
     return out_path
 

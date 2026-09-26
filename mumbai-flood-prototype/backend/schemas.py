@@ -37,12 +37,13 @@ class RouteResponse(BaseModel):
     extra_distance_m: float
     extra_distance_pct: float
     detour_pct: float
-    tolerance_route: dict
-    tolerance_distance_km: float
+    tolerance_route: Optional[dict] = None
+    tolerance_distance_km: Optional[float] = None
     risk_tolerance: Literal["low", "medium", "high", "severe"]
-    max_risk_on_route: float
+    max_risk_on_route: Optional[float] = None
     high_severe_segment_count: int
     warning: Optional[str] = None
+    suggested_route: Optional[dict] = None
 
 
 class ScenarioRequest(BaseModel):

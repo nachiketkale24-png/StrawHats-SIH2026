@@ -8,6 +8,7 @@ import momepy
 import networkx as nx
 
 from . import config
+from .road_segmentation import refine_road_graph
 
 
 def build_road_graph(roads_path=config.ROADS_GPKG, target_crs=config.UTM_43N):
@@ -23,6 +24,9 @@ def build_road_graph(roads_path=config.ROADS_GPKG, target_crs=config.UTM_43N):
     roads_m["length_m"] = roads_m.geometry.length
 
     G = momepy.gdf_to_nx(roads_m, approach="primal", multigraph=False)
+    # Restore existing same-level endpoint connections before discarding
+    # disconnected components; then attribute risk to short road sections.
+    G = refine_road_graph(G)
 
     if not nx.is_connected(G):
         largest_cc = max(nx.connected_components(G), key=len)
