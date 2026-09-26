@@ -25,7 +25,8 @@ from .rainfall_processing import (
     interpolate_rainfall_to_grid,
     compute_station_coverage_mask,
 )
-from .fsi_model import compute_vulnerability, compute_fsi, save_fsi_raster, save_raster, summarize_fsi
+from .fsi_model import (compute_vulnerability, compute_fsi, save_fsi_raster,
+                        save_raster, summarize_fsi, integrate_flood_risk)
 from .road_graph_builder import build_road_graph
 from .road_risk_attribution import attach_flood_risk, save_graph
 from .drainage_network import (
@@ -33,7 +34,6 @@ from .drainage_network import (
     couple_rainfall_to_drainage, compute_surcharge,
     compute_surface_flood_indicator, export_drainage_status,
 )
-import numpy as np
 import pandas as pd
 
 
@@ -107,7 +107,7 @@ def run(event_index: int = 0, rebuild_road_graph: bool = True, event_date: str =
         G_drain, dem_clean.shape, grid_lon, grid_lat, combined_valid, m_per_deg_lat
     )
     # Notebook Section 16: additive surcharge contribution, clipped to [0, 1].
-    integrated_risk = np.clip(fsi + config.W_DRAINAGE_IN_RISK * surface_indicator, 0, 1)
+    integrated_risk = integrate_flood_risk(fsi, surface_indicator)
     integrated_path = config.integrated_flood_risk_tif(event_date_str)
     save_raster(integrated_risk, combined_valid, transform, crs, integrated_path,
                 "integrated_flood_risk_fsi_plus_drainage")

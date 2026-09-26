@@ -157,7 +157,17 @@ def compute_runoff_volume(rainfall_grid, built_up, combined_valid, transform):
 
 
 def couple_rainfall_to_drainage(graph, rainfall_grid, runoff_volume_m3,
-                                grid_lon, grid_lat, combined_valid):
+                                grid_lon, grid_lat, combined_valid, duration_minutes=None):
+    """Convert accumulated runoff to mean flow over its accumulation duration.
+
+    Daily callers retain the configured storm duration when no interval is supplied.
+    """
+    duration_seconds = (config.STORM_DURATION_HOURS * 3600.0 if duration_minutes is None
+                        else float(duration_minutes) * 60.0)
+    if not np.isfinite(duration_seconds) or duration_seconds <= 0:
+        raise ValueError("Drainage duration must be finite and positive")
+    graph.graph["runoff_duration_seconds"] = duration_seconds
+    print(f"Drainage runoff averaging duration: {duration_seconds / 60:g} minutes")
     if rainfall_grid.shape != runoff_volume_m3.shape or rainfall_grid.shape != combined_valid.shape:
         raise ValueError("Rainfall, runoff and valid mask must share the DEM grid")
     node_ids = list(graph.nodes)
@@ -169,8 +179,7 @@ def couple_rainfall_to_drainage(graph, rainfall_grid, runoff_volume_m3,
     assigned = int(np.count_nonzero(runoff_by_index))
     print(f"Runoff assigned to {assigned} / {len(node_ids)} manholes "
           f"({100 * assigned / len(node_ids):.1f}% of nodes receive direct catchment runoff).")
-    nx.set_node_attributes(graph, dict(zip(node_ids, runoff_by_index /
-                                           (config.STORM_DURATION_HOURS * 3600.0))),
+    nx.set_node_attributes(graph, dict(zip(node_ids, runoff_by_index / duration_seconds)),
                            "local_inflow_m3s")
     is_dag = nx.is_directed_acyclic_graph(graph)
     print(f"G_drain is a DAG (no cycles): {is_dag}")
@@ -246,7 +255,8 @@ def export_drainage_status(graph, manholes, drains, event_date):
     manholes_out = manholes.copy()
     manholes_out["surcharged"] = manholes_out["NODE_ID"].astype(str).isin(surcharged_nodes)
     manholes_path = config.drainage_manholes_gpkg(event_date)
-    manholes_out.to_file(manholes_path, layer="manholes", driver="GPKG")
+    manholes_temporary = manholes_path.with_name(manholes_path.stem + '.tmp.gpkg')
+    manholes_out.to_file(manholes_temporary, layer="manholes", driver="GPKG")
 
     drains_out = drains.copy()
     edge_status = {(u, v): edge for u, v, edge in graph.edges(data=True)}
@@ -255,11 +265,16 @@ def export_drainage_status(graph, manholes, drains, event_date):
     drains_out["q_in_m3s"] = [edge.get("q_in_m3s", np.nan) for edge in status]
     drains_out["surcharged"] = [edge.get("surcharged", False) for edge in status]
     drains_path = config.drainage_status_gpkg(event_date)
-    drains_out.to_file(drains_path, layer="drains", driver="GPKG")
+    drains_temporary = drains_path.with_name(drains_path.stem + '.tmp.gpkg')
+    drains_out.to_file(drains_temporary, layer="drains", driver="GPKG")
+    manholes_temporary.replace(manholes_path)
+    drains_temporary.replace(drains_path)
 
     graph_path = config.drainage_graph_pickle(event_date)
-    with open(graph_path, "wb") as file:
+    graph_temporary = graph_path.with_suffix('.pkl.tmp')
+    with open(graph_temporary, "wb") as file:
         pickle.dump(graph, file)
+    graph_temporary.replace(graph_path)
     for path in (manholes_path, drains_path, graph_path):
         print(f"Saved: {path}")
     return manholes_path, drains_path, graph_path

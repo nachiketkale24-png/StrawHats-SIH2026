@@ -1,6 +1,7 @@
 """
-Serves precomputed FSI rasters. Loads raster metadata lazily/once per event
-and caches it in memory — never recomputes FSI from raw rainfall/DEM/land
+Serves drainage-integrated risk when available, with legacy plain-FSI fallback.
+Caches rasters in memory and refreshes them when the file changes.
+Never recomputes FSI from raw rainfall/DEM/land
 cover inside a request (that stays in the offline pipeline).
 """
 
@@ -41,13 +42,16 @@ class FloodService:
         return sorted(set(events))
 
     def _load_raster(self, event_date: str):
-        if event_date not in self._raster_cache:
-            path = config.flood_risk_tif(event_date)
+        path = Path(self.get_raster_path(event_date))
+        stamp = (str(path), path.stat().st_mtime_ns)
+        if (event_date not in self._raster_cache or
+                self._raster_cache[event_date].get("stamp") != stamp):
             if not Path(path).exists():
                 raise FileNotFoundError(f"No FSI raster found for event {event_date}")
             with rasterio.open(path) as src:
                 array = src.read(1)
                 self._raster_cache[event_date] = {
+                    "stamp": stamp,
                     "array": array,
                     "transform": src.transform,
                     "crs": src.crs,
@@ -101,7 +105,9 @@ class FloodService:
 
     def get_raster_path(self, event_date: str) -> str:
         """Used to serve the raw GeoTIFF file directly (e.g. for a tile server)."""
-        path = config.flood_risk_tif(event_date)
+        path = config.integrated_flood_risk_tif(event_date)
+        if not path.exists():
+            path = config.flood_risk_tif(event_date)
         if not Path(path).exists():
             raise FileNotFoundError(f"No FSI raster found for event {event_date}")
         return str(path)

@@ -3,9 +3,17 @@ from fastapi.responses import FileResponse
 
 from backend.services.flood_service import flood_service
 from backend.schemas import EventInfo
+from pipeline import config
 from backend.services.event_windows import RainfallSource, WindowMinutes, event_key, get_windows
 
 router = APIRouter(prefix="/flood", tags=["flood"])
+
+
+@router.get('/land-mask')
+def get_land_mask():
+    if not config.LAND_MASK_TIF.exists():
+        raise HTTPException(status_code=404, detail='Land display mask missing; run the offline land-cover processing.')
+    return FileResponse(config.LAND_MASK_TIF, media_type='image/tiff')
 
 
 @router.get("/events", response_model=list[str])
@@ -28,7 +36,7 @@ def get_summary(event_date: str, window_minutes: WindowMinutes | None = None,
 @router.get("/raster/{event_date}")
 def get_raster(event_date: str, window_minutes: WindowMinutes | None = None,
                rainfall_source: RainfallSource = RainfallSource.OBSERVED):
-    """Serves the raw FSI GeoTIFF — point a tile server (e.g. titiler) at this for the map layer."""
+    """Serve the drainage-integrated GeoTIFF, or legacy plain FSI if unavailable."""
     try:
         path = flood_service.get_raster_path(event_key(event_date, window_minutes, rainfall_source))
         return FileResponse(path, media_type="image/tiff")
@@ -49,7 +57,7 @@ def get_coverage_mask():
 @router.get("/point/{event_date}")
 def get_point_value(event_date: str, lon: float, lat: float, window_minutes: WindowMinutes | None = None,
                     rainfall_source: RainfallSource = RainfallSource.OBSERVED):
-    """Returns the FSI value at a specific map-click coordinate."""
+    """Return the displayed drainage-integrated score at a map-click coordinate."""
     try:
         value = flood_service.sample_at_point(event_key(event_date, window_minutes, rainfall_source), lon, lat)
         in_network = flood_service.sample_coverage(lon, lat)

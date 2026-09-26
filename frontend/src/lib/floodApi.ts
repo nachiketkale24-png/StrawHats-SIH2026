@@ -31,8 +31,14 @@ export interface DrainageResponse {
     surcharged_conduits: number
   }
 }
-export async function getDrainage(event: string, signal: AbortSignal, full = false): Promise<DrainageResponse> {
-  return (await apiRequest(`/drainage/${encodeURIComponent(event)}${full ? '?full=true' : ''}`, signal)).json()
+export async function getDrainage(event: string, signal: AbortSignal, full = false,
+  minutes?: number, rainfallSource: RainfallSource = 'observed'): Promise<DrainageResponse> {
+  const query = new URLSearchParams()
+  if (full) query.set('full', 'true')
+  if (minutes !== undefined) query.set('window_minutes', String(minutes))
+  if (rainfallSource === 'nowcast') query.set('rainfall_source', rainfallSource)
+  const suffix = query.size ? `?${query}` : ''
+  return (await apiRequest(`/drainage/${encodeURIComponent(event)}${suffix}`, signal)).json()
 }
 export interface EventSummary { event_date: string; fsi_min: number; fsi_max: number; fsi_mean: number }
 export interface EventWindow { minutes: number; start_time: string; end_time: string }
@@ -50,12 +56,13 @@ export async function getWindows(event: string, signal: AbortSignal, rainfallSou
 export interface ApiRoute { length_m: number; max_risk: number; avg_risk: number; coordinates: [number, number][] }
 export interface ApiRouteLine { type: 'LineString'; coordinates: [number, number][] }
 export interface RouteComparison {
+  suggested_route: (ApiRoute & { risk_tolerance: RiskTolerance }) | null
   event_date: string
   normal_route: ApiRoute
   normal_distance_km: number
-  tolerance_route: ApiRouteLine
-  tolerance_distance_km: number
-  max_risk_on_route: number
+  tolerance_route: ApiRouteLine | null
+  tolerance_distance_km: number | null
+  max_risk_on_route: number | null
   high_severe_segment_count: number
   warning: string | null
 }
@@ -87,21 +94,22 @@ export async function getRoutes(event: string, start: RoutePoint, end: RoutePoin
   }
 
   const fallbackRoute = result.flood_aware_route
-  const toleranceRoute = result.tolerance_route?.type === 'LineString' && Array.isArray(result.tolerance_route.coordinates)
+  const toleranceRoute = result.tolerance_route === null ? null : result.tolerance_route?.type === 'LineString' && Array.isArray(result.tolerance_route.coordinates)
     ? result.tolerance_route
     : fallbackRoute && { type: 'LineString' as const, coordinates: fallbackRoute.coordinates }
-  if (!toleranceRoute) {
+  if (toleranceRoute === undefined) {
     throw new Error('This API server does not provide a tolerance route. Restart the backend.')
   }
   const fallbackDistanceKm = fallbackRoute ? fallbackRoute.length_m / 1000 : undefined
 
   return {
+    suggested_route: result.suggested_route ?? null,
     event_date: result.event_date ?? event,
     normal_route: result.normal_route,
     normal_distance_km: result.normal_distance_km ?? result.normal_route.length_m / 1000,
-    tolerance_route: toleranceRoute,
-    tolerance_distance_km: result.tolerance_distance_km ?? fallbackDistanceKm ?? result.normal_route.length_m / 1000,
-    max_risk_on_route: result.max_risk_on_route ?? fallbackRoute?.max_risk ?? result.normal_route.max_risk,
+    tolerance_route: toleranceRoute ?? null,
+    tolerance_distance_km: toleranceRoute ? result.tolerance_distance_km ?? fallbackDistanceKm ?? result.normal_route.length_m / 1000 : null,
+    max_risk_on_route: toleranceRoute ? result.max_risk_on_route ?? fallbackRoute?.max_risk ?? result.normal_route.max_risk : null,
     high_severe_segment_count: result.high_severe_segment_count ?? 0,
     warning: result.warning ?? null,
   }

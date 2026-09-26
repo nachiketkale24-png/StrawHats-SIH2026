@@ -8,6 +8,7 @@ import geopandas as gpd
 from shapely.geometry import mapping
 
 from pipeline import config
+from backend.services.event_windows import RainfallSource
 
 
 def _number(value):
@@ -29,18 +30,25 @@ def _feature(identifier, geometry, properties):
 
 class DrainageService:
     def __init__(self):
-        self._cache = {}  # event -> (GeoPackage mtimes, full response, filtered response)
+        self._cache = {}  # event/window -> (GeoPackage mtimes, full response, filtered response)
 
-    def get_status(self, event_id: str, full: bool = False):
+    def get_status(self, event_id: str, full: bool = False, window_minutes: int | None = None,
+                   rainfall_source: RainfallSource = RainfallSource.OBSERVED):
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", event_id):
             raise FileNotFoundError("Unknown event date")
-        manholes_path = config.drainage_manholes_gpkg(event_id)
-        drains_path = config.drainage_status_gpkg(event_id)
+        source = RainfallSource(rainfall_source)
+        if source is RainfallSource.NOWCAST and window_minutes is None:
+            raise FileNotFoundError(f"Nowcast drainage requires a time window for event {event_id}")
+        prefix = "nowcast_" if source is RainfallSource.NOWCAST else ""
+        key = event_id if window_minutes is None else f"{prefix}{event_id}_{window_minutes}min"
+        manholes_path = config.drainage_manholes_gpkg(key)
+        drains_path = config.drainage_status_gpkg(key)
         if not Path(manholes_path).exists() or not Path(drains_path).exists():
-            raise FileNotFoundError(f"No drainage status files found for event {event_id}")
+            window_label = "daily" if window_minutes is None else f"{window_minutes}-minute"
+            raise FileNotFoundError(f"No {source.value} {window_label} drainage status files found for event {event_id}")
 
         mtimes = (manholes_path.stat().st_mtime_ns, drains_path.stat().st_mtime_ns)
-        cached = self._cache.get(event_id)
+        cached = self._cache.get(key)
         if cached and cached[0] == mtimes:
             return cached[1] if full else cached[2]
 
@@ -104,7 +112,7 @@ class DrainageService:
             ]},
             "summary": summary,
         }
-        self._cache[event_id] = (mtimes, response, filtered)
+        self._cache[key] = (mtimes, response, filtered)
         return response if full else filtered
 
 

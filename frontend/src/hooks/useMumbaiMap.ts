@@ -42,9 +42,11 @@ export function useMumbaiMap(
         attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
       })
       // Keep both basemaps in the style; visibility switches do not reload the style.
+      let satelliteVisible = false
+      try { satelliteVisible = localStorage.getItem('mumbai-satellite') === 'true' } catch { /* Storage may be disabled. */ }
       if (!map.getLayer('satellite-imagery')) map.addLayer({
         id: 'satellite-imagery', type: 'raster', source: 'esri-imagery',
-        layout: { visibility: 'none' },
+        layout: { visibility: satelliteVisible ? 'visible' : 'none' },
       })
       if (!map.getSource('openfreemap')) map.addSource('openfreemap', { type: 'vector', url: 'https://tiles.openfreemap.org/planet' })
       if (!map.getLayer('mumbai-buildings-3d')) map.addLayer({

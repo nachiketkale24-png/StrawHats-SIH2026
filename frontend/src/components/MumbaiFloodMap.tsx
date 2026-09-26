@@ -28,16 +28,36 @@ import { RiskToleranceSelector } from './RoutePanel'
 import type { RiskTolerance } from './RoutePanel'
 import { API_BASE, apiRequest, getDrainage, getEvents, getRoutes, getSummary, getWindows, windowQuery } from '../lib/floodApi'
 import type { DrainageResponse, EventSummary, RainfallSource, RouteComparison, EventWindows } from '../lib/floodApi'
-import { clearCoverageOverlay, clearEventRaster, FSI_COLORS, loadCoverageOverlay, loadEventRaster, updateEventRoutes } from '../lib/eventLayers'
+import { clearCoverageOverlay, clearEventRaster, FSI_COLORS, loadEventRaster, updateEventRoutes } from '../lib/eventLayers'
 import { clearDrainageLayers, updateDrainageLayers } from '../lib/drainageLayers'
 import type { MapMode, RoutePoint } from '../types/flood'
 
 type MobileTab = 'events' | 'routes' | 'legend' | null
 
-function DrainageNetworkControl({ summary, full, onToggle }: {
+function RouteSuggestion({ route, onAccept }: {
+  route: RouteComparison['suggested_route']
+  onAccept: (tolerance: RiskTolerance) => void
+}) {
+  if (!route) return null
+  const label = route.risk_tolerance[0].toUpperCase() + route.risk_tolerance.slice(1)
+  return <div className="mt-3 space-y-2" role="status" aria-live="polite">
+    <p className="text-xs text-[var(--text-primary)]">
+      Alternative: {(route.length_m / 1000).toFixed(2)} km,
+      maximum flood risk {route.max_risk.toFixed(3)}. This requires accepting {label.toLowerCase()} risk tolerance.
+    </p>
+    <button type="button" className="hud-button w-full px-3 py-2 text-xs"
+      onClick={() => onAccept(route.risk_tolerance)}>
+      Increase to {label} and use this route
+    </button>
+  </div>
+}
+
+function DrainageNetworkControl({ summary, full, affected, onToggle, onAffectedToggle }: {
   summary: DrainageResponse['summary'] | null
   full: boolean
+  affected: boolean
   onToggle: (value: boolean) => void
+  onAffectedToggle: (value: boolean) => void
 }) {
   return (
     <div className="mt-3 border-t border-[var(--border-secondary)] pt-3 text-[11px] text-[var(--text-secondary)]">
@@ -48,6 +68,11 @@ function DrainageNetworkControl({ summary, full, onToggle }: {
           {summary.surcharged_conduits.toLocaleString()} of {summary.total_conduits.toLocaleString()} conduits surcharged
         </p>
       ) : <p className="mt-1.5">Drainage status unavailable for this event.</p>}
+      <label className="mt-2 flex cursor-pointer items-start gap-2 text-[var(--text-primary)]">
+        <input type="checkbox" className="mt-0.5 accent-[var(--gold-primary)]" checked={affected}
+          disabled={!summary} onChange={event => onAffectedToggle(event.target.checked)} />
+        <span>Show affected drainage (yellow/red)</span>
+      </label>
       <label className="mt-2 flex cursor-pointer items-start gap-2 text-[var(--text-primary)]">
         <input type="checkbox" className="mt-0.5 accent-[var(--gold-primary)]" checked={full}
           disabled={!summary} onChange={event => onToggle(event.target.checked)} />
@@ -61,7 +86,9 @@ export default function MumbaiFloodMap() {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<Map | null>(null)
   const [ready, setReady] = useState(false)
-  const [satellite, setSatellite] = useState(false)
+  const [satellite, setSatellite] = useState(() => {
+    try { return localStorage.getItem('mumbai-satellite') === 'true' } catch { return false }
+  })
   const [threeD, setThreeD] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [events, setEvents] = useState<string[]>([])
@@ -79,11 +106,26 @@ export default function MumbaiFloodMap() {
   const [rasterStatus, setRasterStatus] = useState('')
   const [drainageStatus, setDrainageStatus] = useState('')
   const [showFullDrainage, setShowFullDrainage] = useState(false)
-  const [drainageInfo, setDrainageInfo] = useState<{ event: string; summary: DrainageResponse['summary'] } | null>(null)
-  const drainageSummary = drainageInfo?.event === event ? drainageInfo.summary : null
+  const [showAffectedDrainage, setShowAffectedDrainage] = useState(false)
+  const toggleFullDrainage = (value: boolean) => {
+    setShowFullDrainage(value)
+    if (value) setShowAffectedDrainage(false)
+  }
+  const toggleAffectedDrainage = (value: boolean) => {
+    setShowAffectedDrainage(value)
+    if (value) setShowFullDrainage(false)
+  }
+  const [drainageInfo, setDrainageInfo] = useState<{
+    event: string; minutes: number | undefined; rainfallSource: RainfallSource;
+    summary: DrainageResponse['summary']
+  } | null>(null)
+  const drainageSummary = drainageInfo?.event === event && drainageInfo.minutes === selectedMinutes
+    && drainageInfo.rainfallSource === rainfallSource
+    ? drainageInfo.summary : null
   const [mode, setMode] = useState<MapMode>('inspect')
   const [points, setPoints] = useState<RoutePoint[]>([])
   const [routes, setRoutes] = useState<RouteComparison | null>(null)
+  const [dismissedSuggestion, setDismissedSuggestion] = useState<RouteComparison | null>(null)
   const [routeStatus, setRouteStatus] = useState('')
   const [riskTolerance, setRiskTolerance] = useState<RiskTolerance>('low')
   
@@ -123,23 +165,16 @@ export default function MumbaiFloodMap() {
 
   useEffect(() => {
     const map = mapRef.current
-    if (!ready || !map || !map.isStyleLoaded()) return
+    if (!ready || !map) return
     const controller = new AbortController()
     clearEventRaster(map)
+    clearCoverageOverlay(map)
     if (!intervalReady) { setRasterStatus(''); return }
     setRasterStatus('Loading flood susceptibility map…')
-    Promise.all([
-      loadEventRaster(event, controller.signal, selectedMinutes, rainfallSource),
-      loadCoverageOverlay(controller.signal).catch(() => null),
-    ]).then(([image, coverage]) => {
+    loadEventRaster(event, controller.signal, selectedMinutes, rainfallSource).then(image => {
       if (controller.signal.aborted) return
       map.addSource('event-fsi', { type: 'image', ...image })
       map.addLayer({ id: 'event-fsi', type: 'raster', source: 'event-fsi', paint: { 'raster-fade-duration': 0, 'raster-resampling': 'nearest' } }, 'mumbai-buildings-3d')
-      if (coverage) {
-        clearCoverageOverlay(map)
-        map.addSource('station-coverage', { type: 'image', ...coverage })
-        map.addLayer({ id: 'station-coverage', type: 'raster', source: 'station-coverage', paint: { 'raster-fade-duration': 0, 'raster-resampling': 'nearest' } }, 'mumbai-buildings-3d')
-      }
       setRasterStatus('')
     }).catch(err => { if (!controller.signal.aborted) setRasterStatus(`Flood map unavailable: ${err.message}`) })
     return () => controller.abort()
@@ -151,12 +186,13 @@ export default function MumbaiFloodMap() {
     const controller = new AbortController()
     clearDrainageLayers(map)
     setDrainageStatus('')
-    if (event) {
+    setDrainageInfo(null)
+    if (intervalReady) {
       setDrainageStatus('Loading drainage network…')
-      getDrainage(event, controller.signal, showFullDrainage).then(data => {
+      getDrainage(event, controller.signal, showFullDrainage, selectedMinutes, rainfallSource).then(data => {
         if (!controller.signal.aborted) {
-          updateDrainageLayers(map, data, showFullDrainage)
-          setDrainageInfo({ event, summary: data.summary })
+          if (showAffectedDrainage || showFullDrainage) updateDrainageLayers(map, data, showFullDrainage)
+          setDrainageInfo({ event, minutes: selectedMinutes, rainfallSource, summary: data.summary })
           setDrainageStatus('')
         }
       }).catch(err => {
@@ -164,7 +200,7 @@ export default function MumbaiFloodMap() {
       })
     }
     return () => controller.abort()
-  }, [ready, event, refresh, showFullDrainage])
+  }, [ready, event, refresh, intervalReady, selectedMinutes, rainfallSource, showFullDrainage, showAffectedDrainage])
 
   const start = points[0], end = points[1]
   useEffect(() => {
@@ -180,7 +216,7 @@ export default function MumbaiFloodMap() {
   }, [event, start, end, riskTolerance, refresh, intervalReady, selectedMinutes, rainfallSource])
 
   useEffect(() => {
-    if (ready && mapRef.current?.isStyleLoaded()) updateEventRoutes(mapRef.current, points, routes)
+    if (ready && mapRef.current) updateEventRoutes(mapRef.current, points, routes)
   }, [ready, points, routes])
 
   useEffect(() => {
@@ -246,8 +282,9 @@ export default function MumbaiFloodMap() {
   }, [ready, mode, event, intervalReady, selectedMinutes, activeWindow, rainfallSource])
 
   useEffect(() => {
+    try { localStorage.setItem('mumbai-satellite', String(satellite)) } catch { /* Storage may be disabled. */ }
     const map = mapRef.current
-    if (!ready || !map || !map.isStyleLoaded() || !map.getLayer('satellite-imagery')) return
+    if (!ready || !map || !map.getLayer('satellite-imagery')) return
     map.setLayoutProperty('satellite-imagery', 'visibility', satellite ? 'visible' : 'none')
   }, [satellite, ready])
   
@@ -280,6 +317,26 @@ export default function MumbaiFloodMap() {
     <section className="relative h-full w-full bg-[var(--bg-secondary)] overflow-hidden" aria-label="Mumbai flood susceptibility map">
       {/* Map Canvas */}
       <div ref={containerRef} className="absolute inset-0 h-full w-full" />
+
+      {routes?.suggested_route && !routes.tolerance_route && dismissedSuggestion !== routes && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="route-alternative-title"
+            className="w-full max-w-sm rounded-xl border border-amber-400/60 bg-[var(--bg-panel)] p-5 text-[var(--text-primary)] shadow-2xl">
+            <div className="flex items-center justify-between gap-3">
+              <h2 id="route-alternative-title" className="text-sm font-semibold">A route is available at higher tolerance</h2>
+              <button type="button" aria-label="Dismiss route suggestion" autoFocus
+                className="hud-button p-2" onClick={() => setDismissedSuggestion(routes)}><X size={16} /></button>
+            </div>
+            <p className="mt-3 text-xs leading-relaxed">{routes.warning}</p>
+            <RouteSuggestion route={routes.suggested_route} onAccept={tolerance => {
+              setDismissedSuggestion(routes)
+              setRiskTolerance(tolerance)
+            }} />
+            <button type="button" className="mt-2 w-full py-2 text-xs text-[var(--text-secondary)]"
+              onClick={() => setDismissedSuggestion(routes)}>Keep current tolerance</button>
+          </div>
+        </div>
+      )}
 
       {/* Loading / Status Toast Banner */}
       {(!ready || error || rasterStatus || drainageStatus || apiError) && (
@@ -432,7 +489,7 @@ export default function MumbaiFloodMap() {
                   ].map(item => (
                     <div className="flex items-center justify-between text-xs" key={item.label}>
                       <div className="flex items-center gap-2">
-                        <span className="h-3 w-3 rounded shadow-sm" style={{ background: item.color }} />
+                        <span className="h-3 w-3 rounded shadow-sm" style={{ background: item.color, border: item.color === 'transparent' ? '1px solid #94a3b8' : undefined }} />
                         <span className="text-[var(--text-primary)]">{item.label}</span>
                       </div>
                       <span className="font-[family-name:var(--font-hud)] text-[10px] text-[var(--text-secondary)]">{item.range}</span>
@@ -440,14 +497,13 @@ export default function MumbaiFloodMap() {
                   ))}
                 </div>
 
-                <div className="mt-2.5 flex items-center gap-2 border-t border-[var(--border-secondary)] pt-2 text-[11px] text-[var(--text-secondary)]">
-                  <span
-                    className="h-3 w-3 rounded border border-slate-400 shrink-0"
-                    style={{ background: 'repeating-linear-gradient(135deg, rgb(226 232 240 / 0.7) 0 2px, rgb(15 23 42 / 0.45) 2px 6px)' }}
-                  />
-                  <span>Hatched: Extrapolated (outside gauge network)</span>
-                </div>
-                <DrainageNetworkControl summary={drainageSummary} full={showFullDrainage} onToggle={setShowFullDrainage} />
+                <p className="mt-2.5 border-t border-[var(--border-secondary)] pt-2 text-[11px] text-[var(--text-secondary)]">
+                  Risk shading is shown over land. Open water is unshaded. Extrapolation details are available when inspecting a point.
+                </p>
+                <p className="mt-2 text-[10px] leading-relaxed text-[var(--text-secondary)]">
+                  Overlay fades at data limits. Areas beyond coverage are unassessed.
+                </p>
+                <DrainageNetworkControl summary={drainageSummary} full={showFullDrainage} affected={showAffectedDrainage} onToggle={toggleFullDrainage} onAffectedToggle={toggleAffectedDrainage} />
               </Panel>
             </motion.div>
           )}
@@ -573,14 +629,14 @@ export default function MumbaiFloodMap() {
                         {riskTolerance[0].toUpperCase() + riskTolerance.slice(1)}-risk route
                       </span>
                       <span className="font-[family-name:var(--font-hud)] font-bold text-[var(--text-primary)]">
-                        {routes.tolerance_distance_km.toFixed(2)} km
+                        {routes.tolerance_distance_km === null ? 'No qualifying route' : `${routes.tolerance_distance_km.toFixed(2)} km`}
                       </span>
                     </div>
 
                     <div className="rounded bg-[var(--bg-secondary)] p-2 font-[family-name:var(--font-hud)] text-[11px] text-[var(--text-secondary)] space-y-1">
                       <div className="flex justify-between">
                         <span>Tolerance Route Max Risk:</span>
-                        <span className="text-emerald-400 font-bold">{routes.max_risk_on_route.toFixed(3)}</span>
+                        <span className="text-emerald-400 font-bold">{routes.max_risk_on_route?.toFixed(3) ?? '—'}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Fastest Route Avg Risk:</span>
@@ -588,7 +644,7 @@ export default function MumbaiFloodMap() {
                       </div>
                       <div className="flex justify-between border-t border-[var(--border-secondary)] pt-1 text-[10px]">
                         <span>Distance difference:</span>
-                        <span className="text-[var(--gold-light)]">+{(routes.tolerance_distance_km - routes.normal_distance_km).toFixed(2)} km</span>
+                        <span className="text-[var(--gold-light)]">{routes.tolerance_distance_km === null ? '—' : `+${(routes.tolerance_distance_km - routes.normal_distance_km).toFixed(2)} km`}</span>
                       </div>
                     </div>
                   </div>
@@ -597,6 +653,7 @@ export default function MumbaiFloodMap() {
                       <AlertCircle size={16} className="mt-0.5 shrink-0 text-[var(--warning-color)]" />
                       <PanelCaption className="text-[var(--text-primary)]">{routes.warning}</PanelCaption>
                     </div>
+                    <RouteSuggestion route={routes.suggested_route} onAccept={setRiskTolerance} />
                   </Panel>}
                 </div>}
               </Panel>
@@ -884,14 +941,14 @@ export default function MumbaiFloodMap() {
                             {riskTolerance[0].toUpperCase() + riskTolerance.slice(1)}-risk route
                           </span>
                           <span className="font-[family-name:var(--font-hud)] text-sm font-bold text-white">
-                            {routes.tolerance_distance_km.toFixed(2)} km
+                            {routes.tolerance_distance_km === null ? 'No qualifying route' : `${routes.tolerance_distance_km.toFixed(2)} km`}
                           </span>
                         </div>
 
                         <div className="rounded-lg bg-[var(--bg-secondary)] p-2.5 font-[family-name:var(--font-hud)] text-[11px] text-[var(--text-secondary)] space-y-1">
                           <div className="flex justify-between">
                             <span>Tolerance Route Max Risk:</span>
-                            <span className="text-emerald-400 font-bold">{routes.max_risk_on_route.toFixed(3)}</span>
+                            <span className="text-emerald-400 font-bold">{routes.max_risk_on_route?.toFixed(3) ?? '—'}</span>
                           </div>
                           <div className="flex justify-between">
                             <span>Fastest Route Risk:</span>
@@ -912,6 +969,7 @@ export default function MumbaiFloodMap() {
                           <AlertCircle size={16} className="mt-0.5 shrink-0 text-[var(--warning-color)]" />
                           <PanelCaption className="text-[var(--text-primary)]">{routes.warning}</PanelCaption>
                         </div>
+                        <RouteSuggestion route={routes.suggested_route} onAccept={setRiskTolerance} />
                       </Panel>}
                     </div>}
                   </div>
@@ -953,7 +1011,7 @@ export default function MumbaiFloodMap() {
                       ].map(item => (
                         <div className="flex items-center justify-between rounded-lg border border-[var(--border-secondary)] bg-[var(--bg-primary)] px-3 py-2 text-xs" key={item.label}>
                           <div className="flex items-center gap-2.5">
-                            <span className="h-3.5 w-3.5 rounded shadow" style={{ background: item.color }} />
+                            <span className="h-3.5 w-3.5 rounded shadow" style={{ background: item.color, border: item.color === 'transparent' ? '1px solid #94a3b8' : undefined }} />
                             <span className="font-medium text-[var(--text-primary)]">{item.label}</span>
                           </div>
                           <span className="font-[family-name:var(--font-hud)] text-[11px] text-[var(--text-secondary)]">{item.range}</span>
@@ -962,18 +1020,14 @@ export default function MumbaiFloodMap() {
                     </div>
 
                     <div className="rounded-xl border border-[var(--border-secondary)] bg-[var(--bg-primary)] p-3 text-xs text-[var(--text-secondary)] space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="h-3.5 w-3.5 rounded border border-slate-400 shrink-0"
-                          style={{ background: 'repeating-linear-gradient(135deg, rgb(226 232 240 / 0.7) 0 2px, rgb(15 23 42 / 0.45) 2px 6px)' }}
-                        />
-                        <span className="font-semibold text-[var(--text-primary)]">Hatched Confidence Overlay</span>
-                      </div>
                       <p className="text-[11px] leading-relaxed">
-                        Areas with cross-hatching sit outside BMC rain-gauge triangulation and represent extrapolated predictions.
+                        Risk shading is shown over land. Open water is unshaded. Extrapolation details are available when inspecting a point.
+                      </p>
+                      <p className="text-[11px] leading-relaxed">
+                        Overlay fades at data limits. Areas beyond coverage are unassessed.
                       </p>
                     </div>
-                    <DrainageNetworkControl summary={drainageSummary} full={showFullDrainage} onToggle={setShowFullDrainage} />
+                    <DrainageNetworkControl summary={drainageSummary} full={showFullDrainage} affected={showAffectedDrainage} onToggle={toggleFullDrainage} onAffectedToggle={toggleAffectedDrainage} />
                   </div>
                 )}
               </div>

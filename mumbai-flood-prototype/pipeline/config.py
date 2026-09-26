@@ -27,6 +27,7 @@ DRAINS_GEOJSON = DATA_RAW_DIR / "mumbai_storm_water_drains.geojson"
 # ---------------------------------------------------------
 DEM_CLIPPED_TIF = DATA_PROCESSED_DIR / "mumbai_dem_clipped.tif"
 LANDCOVER_FEATURES_TIF = DATA_PROCESSED_DIR / "landcover_features.tif"
+LAND_MASK_TIF = DATA_PROCESSED_DIR / "map_land_mask.tif"
 ROADS_GPKG = DATA_PROCESSED_DIR / "mumbai_vehicle_roads.gpkg"
 
 # Static vulnerability layer — terrain/surface only, reused across events.

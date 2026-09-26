@@ -23,13 +23,13 @@ TOLERANCE_THRESHOLDS = {
 
 
 def tolerance_weight_fn(tolerance_threshold):
-    """Create a request-specific route weight without mutating graph edges."""
+    """Hide roads at or above the selected risk limit without mutating edges."""
     def weight(u, v, edge_data):
         risk = edge_data.get("flood_risk", 0.0)
         length = edge_data.get("length_m", edge_data.get("weight_normal", 1.0))
         if risk < tolerance_threshold:
             return length
-        return length * config.risk_penalty_multiplier(risk)
+        return None
 
     return weight
 
@@ -40,12 +40,13 @@ class RoutingService:
         self._graph_crs = config.UTM_43N
 
     def _get_graph(self, event_date: str):
-        if event_date not in self._graph_cache:
-            path = config.road_graph_pickle(event_date)
-            if not Path(path).exists():
-                raise FileNotFoundError(f"No road graph found for event {event_date}")
-            self._graph_cache[event_date] = load_graph(path)
-        return self._graph_cache[event_date]
+        path = config.road_graph_pickle(event_date)
+        if not Path(path).exists():
+            raise FileNotFoundError(f"No road graph found for event {event_date}")
+        stamp = (Path(path).stat().st_mtime_ns, Path(path).stat().st_size)
+        if event_date not in self._graph_cache or self._graph_cache[event_date][0] != stamp:
+            self._graph_cache[event_date] = (stamp, load_graph(path))
+        return self._graph_cache[event_date][1]
 
     def _nearest_node(self, G, lon, lat):
         pt = gpd.GeoSeries([Point(lon, lat)], crs=config.WGS84).to_crs(self._graph_crs).iloc[0]
@@ -123,20 +124,56 @@ class RoutingService:
             G, origin_node, dest_node, weight="weight_flood_aware", method="dijkstra"
         )
         threshold = TOLERANCE_THRESHOLDS[risk_tolerance]
-        tolerance_route = nx.shortest_path(
-            G,
-            origin_node,
-            dest_node,
-            weight=tolerance_weight_fn(threshold),
-            method="dijkstra",
-        )
+        suggested_route = None
+        try:
+            tolerance_route = nx.shortest_path(
+                G,
+                origin_node,
+                dest_node,
+                weight=tolerance_weight_fn(threshold),
+                method="dijkstra",
+            )
+        except nx.NetworkXNoPath:
+            tolerance_route = None
+            unavailable_message = (
+                f"No connected route meets {risk_tolerance.capitalize()} risk tolerance "
+                f"(all road segments must have risk below {threshold:g}). "
+                "Choose different endpoints or increase the tolerance."
+            )
+            for candidate, candidate_threshold in TOLERANCE_THRESHOLDS.items():
+                if candidate_threshold <= threshold:
+                    continue
+                try:
+                    candidate_route = nx.shortest_path(
+                        G, origin_node, dest_node,
+                        weight=tolerance_weight_fn(candidate_threshold), method="dijkstra",
+                    )
+                except nx.NetworkXNoPath:
+                    continue
+                length, maximum, average = self._route_stats(G, candidate_route)
+                suggested_route = {
+                    "risk_tolerance": candidate,
+                    "length_m": length, "max_risk": maximum, "avg_risk": average,
+                    "coordinates": self._route_to_coords(G, candidate_route),
+                }
+                unavailable_message = (
+                    f"No connected route meets {risk_tolerance.capitalize()} tolerance. "
+                    f"A {candidate.capitalize()}-tolerance route is available; "
+                    "the amber line previews it. Increase tolerance to use it."
+                )
+                break
 
         n_len, n_max, n_avg = self._route_stats(G, normal_route)
         f_len, f_max, f_avg = self._route_stats(G, flood_aware_route)
-        t_len, _, _ = self._route_stats(G, tolerance_route)
-        max_risk_on_route, high_severe_segment_count, warning = self._tolerance_route_details(
-            G, tolerance_route
-        )
+        if tolerance_route is None:
+            t_len = max_risk_on_route = None
+            high_severe_segment_count = 0
+            warning = unavailable_message
+        else:
+            t_len, _, _ = self._route_stats(G, tolerance_route)
+            max_risk_on_route, high_severe_segment_count, warning = self._tolerance_route_details(
+                G, tolerance_route
+            )
 
         return {
             "event_date": event_date,
@@ -153,12 +190,13 @@ class RoutingService:
             "extra_distance_m": f_len - n_len,
             "extra_distance_pct": round(100 * (f_len - n_len) / n_len, 2) if n_len else 0.0,
             "detour_pct": round(100 * (f_len - n_len) / n_len, 2) if n_len else 0.0,
-            "tolerance_route": self._route_to_geojson(G, tolerance_route),
-            "tolerance_distance_km": t_len / 1000,
+            "tolerance_route": self._route_to_geojson(G, tolerance_route) if tolerance_route is not None else None,
+            "tolerance_distance_km": t_len / 1000 if t_len is not None else None,
             "risk_tolerance": risk_tolerance,
             "max_risk_on_route": max_risk_on_route,
             "high_severe_segment_count": high_severe_segment_count,
             "warning": warning,
+            "suggested_route": suggested_route,
         }
 
 

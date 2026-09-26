@@ -24,7 +24,7 @@ function status(surcharged: boolean, ratio: number | null): NodeStatus {
 function updateNormalContext(map: Map) {
   const context = contextByMap.get(map)
   if (!context) return
-  const visible = map.getZoom() >= 13
+  const visible = true
   if (context.visible === visible) return
   context.visible = visible
   map.getSource<GeoJSONSource>('drainage-nodes-normal')?.setData(visible ? context.nodes : empty())
@@ -43,15 +43,17 @@ function bearing(start: [number, number], end: [number, number]) {
 export function addDrainageLayers(map: Map) {
   map.addSource('drainage-edges-normal', { type: 'geojson', promoteId: 'id', data: empty() })
   map.addLayer({
-    id: 'drainage-edges-normal', type: 'line', source: 'drainage-edges-normal', minzoom: 13,
-    paint: { 'line-color': color('--status-normal'), 'line-width': 1.75, 'line-opacity': 0.35 },
+    id: 'drainage-edges-normal', type: 'line', source: 'drainage-edges-normal',
+    minzoom: 15,
+    paint: { 'line-color': color('--status-normal'), 'line-width': 1, 'line-opacity': 0.2 },
   })
   map.addSource('drainage-edges', { type: 'geojson', promoteId: 'id', data: empty() })
   map.addLayer({
-    id: 'drainage-edges', type: 'line', source: 'drainage-edges',
+    id: 'drainage-edges', type: 'line', source: 'drainage-edges', minzoom: 15,
     paint: {
       'line-color': ['interpolate', ['linear'], ['get', 'capacityUtilization'], 0, color('--status-normal'), 0.7, color('--capacity-amber'), 1, color('--capacity-red')],
-      'line-width': 3.5,
+      'line-width': 1.25,
+      'line-opacity': 0.55,
       'line-dasharray': ['case', ['>', ['get', 'capacityUtilization'], 0.85], ['literal', [2, 1.5]], ['literal', [1, 0]]],
     },
   })
@@ -68,17 +70,17 @@ export function addDrainageLayers(map: Map) {
   map.addSource('drainage-arrows', { type: 'geojson', promoteId: 'id', data: empty() })
   map.addLayer({
     id: 'drainage-arrows', type: 'symbol', source: 'drainage-arrows',
-    layout: { 'icon-image': 'drainage-flow-arrow', 'icon-size': 0.75, 'icon-rotate': ['get', 'bearing'], 'icon-rotation-alignment': 'map', 'icon-allow-overlap': true },
+    layout: { visibility: 'none', 'icon-image': 'drainage-flow-arrow', 'icon-size': 0.75, 'icon-rotate': ['get', 'bearing'], 'icon-rotation-alignment': 'map', 'icon-allow-overlap': true },
   })
   map.addSource('drainage-nodes-normal', { type: 'geojson', promoteId: 'id', data: empty() })
-  map.addLayer({ id: 'drainage-nodes-normal', type: 'circle', source: 'drainage-nodes-normal', minzoom: 13, paint: {
-    'circle-color': color('--status-normal'), 'circle-radius': 3, 'circle-opacity': 0.35,
-    'circle-stroke-width': 1, 'circle-stroke-color': color('--bg-primary'), 'circle-stroke-opacity': 0.35,
+  map.addLayer({ id: 'drainage-nodes-normal', type: 'circle', source: 'drainage-nodes-normal', paint: {
+    'circle-color': color('--status-normal'), 'circle-radius': 4, 'circle-opacity': 0.35,
+    'circle-stroke-width': 0.5, 'circle-stroke-color': color('--bg-primary'), 'circle-stroke-opacity': 0.35,
   } })
   map.addSource('drainage-nodes', { type: 'geojson', promoteId: 'id', data: empty() })
   map.addLayer({ id: 'drainage-nodes', type: 'circle', source: 'drainage-nodes', paint: {
     'circle-color': ['match', ['get', 'status'], 'normal', color('--status-normal'), 'strained', color('--capacity-amber'), color('--capacity-red')],
-    'circle-radius': 6, 'circle-stroke-width': 2, 'circle-stroke-color': color('--bg-primary'),
+    'circle-radius': 4, 'circle-opacity': 1, 'circle-stroke-width': 1, 'circle-stroke-opacity': 0.85, 'circle-stroke-color': color('--bg-primary'),
   } })
   map.on('zoom', () => updateNormalContext(map))
 }
