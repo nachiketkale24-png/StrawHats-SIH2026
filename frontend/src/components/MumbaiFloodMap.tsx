@@ -30,6 +30,7 @@ import { API_BASE, apiRequest, getDrainage, getEvents, getRoutes, getSummary, ge
 import type { DrainageResponse, EventSummary, RainfallSource, RouteComparison, EventWindows } from '../lib/floodApi'
 import { clearCoverageOverlay, clearEventRaster, FSI_COLORS, loadEventRaster, updateEventRoutes } from '../lib/eventLayers'
 import { clearDrainageLayers, updateDrainageLayers } from '../lib/drainageLayers'
+import { clearDisplayCache } from '../lib/displayCache'
 import type { MapMode, RoutePoint } from '../types/flood'
 
 type MobileTab = 'events' | 'routes' | 'legend' | null
@@ -135,6 +136,8 @@ export default function MumbaiFloodMap() {
 
   useMumbaiMap(containerRef, mapRef, setReady, setError)
 
+  useEffect(() => { clearDisplayCache() }, [refresh])
+
   useEffect(() => {
     const controller = new AbortController()
     setEventsLoading(true); setApiError(''); setEvent(''); setSummary(null); setRoutes(null)
@@ -167,15 +170,23 @@ export default function MumbaiFloodMap() {
     const map = mapRef.current
     if (!ready || !map) return
     const controller = new AbortController()
-    clearEventRaster(map)
     clearCoverageOverlay(map)
-    if (!intervalReady) { setRasterStatus(''); return }
+    if (!intervalReady) { clearEventRaster(map); setRasterStatus(''); return }
     setRasterStatus('Loading flood susceptibility map…')
     loadEventRaster(event, controller.signal, selectedMinutes, rainfallSource).then(image => {
       if (controller.signal.aborted) return
+      clearEventRaster(map)
       map.addSource('event-fsi', { type: 'image', ...image })
       map.addLayer({ id: 'event-fsi', type: 'raster', source: 'event-fsi', paint: { 'raster-fade-duration': 0, 'raster-resampling': 'nearest' } }, 'mumbai-buildings-3d')
       setRasterStatus('')
+      // Warm only the next window once the selected map is visible.
+      const next = windows?.windows.find(window => window.minutes > (selectedMinutes ?? 0))
+      if (next) window.setTimeout(() => {
+        if (!controller.signal.aborted) {
+          void loadEventRaster(event, controller.signal, next.minutes, rainfallSource).catch(() => {})
+          void getDrainage(event, controller.signal, false, next.minutes, rainfallSource, true).catch(() => {})
+        }
+      }, 800)
     }).catch(err => { if (!controller.signal.aborted) setRasterStatus(`Flood map unavailable: ${err.message}`) })
     return () => controller.abort()
   }, [ready, event, refresh, intervalReady, selectedMinutes, rainfallSource])
@@ -188,8 +199,9 @@ export default function MumbaiFloodMap() {
     setDrainageStatus('')
     setDrainageInfo(null)
     if (intervalReady) {
-      setDrainageStatus('Loading drainage network…')
-      getDrainage(event, controller.signal, showFullDrainage, selectedMinutes, rainfallSource).then(data => {
+      setDrainageStatus(showAffectedDrainage || showFullDrainage ? 'Loading drainage network…' : 'Loading drainage counts…')
+      getDrainage(event, controller.signal, showFullDrainage, selectedMinutes, rainfallSource,
+        !showAffectedDrainage && !showFullDrainage).then(data => {
         if (!controller.signal.aborted) {
           if (showAffectedDrainage || showFullDrainage) updateDrainageLayers(map, data, showFullDrainage)
           setDrainageInfo({ event, minutes: selectedMinutes, rainfallSource, summary: data.summary })

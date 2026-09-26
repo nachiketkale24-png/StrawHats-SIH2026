@@ -2,6 +2,8 @@
 
 import math
 import re
+import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import geopandas as gpd
@@ -31,9 +33,11 @@ def _feature(identifier, geometry, properties):
 class DrainageService:
     def __init__(self):
         self._cache = {}  # event/window -> (GeoPackage mtimes, full response, filtered response)
+        self._summary_cache = {}
 
     def get_status(self, event_id: str, full: bool = False, window_minutes: int | None = None,
-                   rainfall_source: RainfallSource = RainfallSource.OBSERVED):
+                   rainfall_source: RainfallSource = RainfallSource.OBSERVED,
+                   summary_only: bool = False):
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", event_id):
             raise FileNotFoundError("Unknown event date")
         source = RainfallSource(rainfall_source)
@@ -49,6 +53,25 @@ class DrainageService:
 
         mtimes = (manholes_path.stat().st_mtime_ns, drains_path.stat().st_mtime_ns)
         cached = self._cache.get(key)
+        if summary_only:
+            cached_summary = self._summary_cache.get(key)
+            if cached and cached[0] == mtimes:
+                summary = cached[1]['summary']
+            elif cached_summary and cached_summary[0] == mtimes:
+                summary = cached_summary[1]
+            else:
+                counts = []
+                for path, table in ((manholes_path, 'manholes'), (drains_path, 'drains')):
+                    with closing(sqlite3.connect(path.resolve().as_uri() + '?mode=ro', uri=True)) as database:
+                        counts.append(database.execute(
+                            f'SELECT COUNT(*), COALESCE(SUM(CASE WHEN surcharged <> 0 THEN 1 ELSE 0 END), 0) FROM {table}'
+                        ).fetchone())
+                summary = dict(total_manholes=counts[0][0], surcharged_manholes=counts[0][1],
+                               total_conduits=counts[1][0], surcharged_conduits=counts[1][1])
+                self._summary_cache[key] = (mtimes, summary)
+            return {'summary': summary,
+                    'manholes': {'type': 'FeatureCollection', 'features': []},
+                    'conduits': {'type': 'FeatureCollection', 'features': []}}
         if cached and cached[0] == mtimes:
             return cached[1] if full else cached[2]
 

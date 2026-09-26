@@ -1,6 +1,7 @@
 import type { RoutePoint } from '../types/flood'
 import type { RiskTolerance } from '../components/RoutePanel'
 import type { FeatureCollection, LineString, Point } from 'geojson'
+import { cachedDisplay } from './displayCache'
 
 export const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
 export type RainfallSource = 'nowcast' | 'observed'
@@ -32,13 +33,16 @@ export interface DrainageResponse {
   }
 }
 export async function getDrainage(event: string, signal: AbortSignal, full = false,
-  minutes?: number, rainfallSource: RainfallSource = 'observed'): Promise<DrainageResponse> {
+  minutes?: number, rainfallSource: RainfallSource = 'observed', summaryOnly = false): Promise<DrainageResponse> {
   const query = new URLSearchParams()
   if (full) query.set('full', 'true')
+  if (summaryOnly) query.set('summary_only', 'true')
   if (minutes !== undefined) query.set('window_minutes', String(minutes))
   if (rainfallSource === 'nowcast') query.set('rainfall_source', rainfallSource)
   const suffix = query.size ? `?${query}` : ''
-  return (await apiRequest(`/drainage/${encodeURIComponent(event)}${suffix}`, signal)).json()
+  const path = `/drainage/${encodeURIComponent(event)}${suffix}`
+  return cachedDisplay<DrainageResponse>(path, signal, async () =>
+    (await apiRequest(path, new AbortController().signal)).json())
 }
 export interface EventSummary { event_date: string; fsi_min: number; fsi_max: number; fsi_mean: number }
 export interface EventWindow { minutes: number; start_time: string; end_time: string }

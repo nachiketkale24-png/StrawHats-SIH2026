@@ -5,6 +5,7 @@ import type { RouteComparison } from './floodApi'
 import type { RoutePoint } from '../types/flood'
 import { projectRaster, featherRasterMask } from './rasterProjection'
 import type { RasterBounds } from './rasterProjection'
+import { cachedDisplay } from './displayCache'
 
 export const FSI_COLORS = ['#38bdf8', '#facc15', '#fb923c', '#ef4444']
 export function addEventLayers(map: Map) {
@@ -64,9 +65,13 @@ function imageCoordinates(bounds: RasterBounds) {
   return { url: '', coordinates: [[west, north], [east, north], [east, south], [west, south]] as [[number, number], [number, number], [number, number], [number, number]] }
 }
 export async function loadEventRaster(event: string, signal: AbortSignal, minutes: number | undefined, rainfallSource: RainfallSource) {
+  const key = `raster:${rainfallSource}:${event}:${minutes ?? 'daily'}`
+  return cachedDisplay(key, signal, () => renderEventRaster(event, new AbortController().signal, minutes, rainfallSource))
+}
+async function renderEventRaster(event: string, signal: AbortSignal, minutes: number | undefined, rainfallSource: RainfallSource) {
   const [raster, land] = await Promise.all([
     readAlignedRaster(`/flood/raster/${encodeURIComponent(event)}${windowQuery(minutes, rainfallSource)}`, signal),
-    readAlignedRaster('/flood/land-mask', signal),
+    cachedDisplay('land-mask', signal, () => readAlignedRaster('/flood/land-mask', new AbortController().signal), Infinity),
   ])
   const { values, width, height, bounds, nodata } = raster
   if (land.width !== width || land.height !== height || land.bounds.some((value, i) => Math.abs(value - bounds[i]) > 1e-9)) {
