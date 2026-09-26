@@ -20,10 +20,11 @@ import { Colors, Fonts } from '../theme'
 interface SettingsModalProps {
   visible: boolean
   onClose: () => void
-  onSuccess: () => void
+  onSaved?: () => void
+  onSuccess?: () => void
 }
 
-export function SettingsModal({ visible, onClose, onSuccess }: SettingsModalProps) {
+export function SettingsModal({ visible, onClose, onSaved, onSuccess }: SettingsModalProps) {
   const [url, setUrl] = useState(getApiBase())
   const [testing, setTesting] = useState(false)
   const [status, setStatus] = useState<{ type: 'idle' | 'success' | 'error'; message: string }>({
@@ -52,7 +53,8 @@ export function SettingsModal({ visible, onClose, onSuccess }: SettingsModalProp
         message: `Connected successfully! Found ${events.length} event(s).`,
       })
       setTimeout(() => {
-        onSuccess()
+        onSaved?.()
+        onSuccess?.()
         onClose()
       }, 1000)
     } catch (err: any) {

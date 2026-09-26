@@ -1,6 +1,6 @@
 /**
  * Legend & Layer settings bottom sheet matching the web frontend's Legend tab.
- * Includes FSI susceptibility scales, confidence explanation, and map style toggles.
+ * Includes FSI susceptibility scales, confidence explanation, drainage network keys, and map style toggles.
  */
 import React from 'react'
 import {
@@ -56,13 +56,10 @@ export function LegendSheet({ mapType, onToggleMapType }: LegendSheetProps) {
     >
       {/* Map Layers Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>MAP DISPLAY LAYERS</Text>
+        <Text style={styles.sectionTitle}>BASE MAP STYLE</Text>
         <View style={styles.layerRow}>
           <TouchableOpacity
-            style={[
-              styles.layerCard,
-              !isSatellite && styles.layerCardActive,
-            ]}
+            style={[styles.layerCard, !isSatellite && styles.layerCardActive]}
             onPress={() => isSatellite && onToggleMapType()}
             activeOpacity={0.8}
           >
@@ -77,7 +74,7 @@ export function LegendSheet({ mapType, onToggleMapType }: LegendSheetProps) {
                 !isSatellite && styles.layerCardTextActive,
               ]}
             >
-              Dark HUD
+              CARTO Dark HUD
             </Text>
           </TouchableOpacity>
 
@@ -100,59 +97,130 @@ export function LegendSheet({ mapType, onToggleMapType }: LegendSheetProps) {
                 isSatellite && styles.layerCardTextActiveCyan,
               ]}
             >
-              Satellite
+              Satellite Imagery
             </Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* FSI Gradient Legend */}
+      {/* FSI Susceptibility Legend */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>FLOOD SUSCEPTIBILITY INDEX (FSI)</Text>
-        <Text style={styles.sectionDesc}>
-          AI/ML raster index mapping probabilistic surface water inundation across Mumbai.
+        <Text style={styles.sectionSubtitle}>
+          Decoded continuous raster values from 0.00 (Dry) to 1.00 (Critical)
         </Text>
 
-        <View style={styles.legendList}>
-          {FSI_LEVELS.map((lvl) => (
-            <View key={lvl.label} style={styles.legendItem}>
-              <View style={[styles.colorIndicator, { backgroundColor: lvl.color }]} />
-              <View style={styles.legendInfo}>
-                <View style={styles.legendHeaderRow}>
-                  <Text style={styles.legendLabel}>{lvl.label}</Text>
-                  <Text style={styles.legendRange}>{lvl.range}</Text>
+        <View style={styles.fsiList}>
+          {FSI_LEVELS.map((item) => (
+            <View key={item.range} style={styles.fsiItem}>
+              <View style={[styles.fsiColorBar, { backgroundColor: item.color }]} />
+              <View style={styles.fsiDetails}>
+                <View style={styles.fsiTopRow}>
+                  <Text style={styles.fsiLabel}>{item.label}</Text>
+                  <Text style={[styles.fsiRange, { color: item.color }]}>
+                    {item.range}
+                  </Text>
                 </View>
-                <Text style={styles.legendDesc}>{lvl.desc}</Text>
+                <Text style={styles.fsiDesc}>{item.desc}</Text>
               </View>
             </View>
           ))}
         </View>
       </View>
 
-      {/* Route Color Legend */}
+      {/* Drainage Network Legend */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>ROUTING ENGINE OVERLAYS</Text>
-        <View style={styles.routeLegendRow}>
-          <View style={styles.routeItem}>
-            <View style={[styles.routeLine, { backgroundColor: Colors.cyan }]} />
-            <Text style={styles.routeText}>Flood-Aware Safe Path</Text>
+        <Text style={styles.sectionTitle}>DRAINAGE & HYDRAULIC NETWORK</Text>
+        <Text style={styles.sectionSubtitle}>
+          Real-time manhole surcharge and conduit capacity utilization
+        </Text>
+
+        <View style={styles.drainageLegendBox}>
+          <View style={styles.drainageRow}>
+            <View style={[styles.nodeDot, { backgroundColor: Colors.statusNormal }]} />
+            <Text style={styles.drainageText}>
+              <Text style={{ fontWeight: '700', color: Colors.statusNormal }}>
+                Normal Node / Pipe:
+              </Text>{' '}
+              Capacity {'<'} 50%
+            </Text>
           </View>
-          <View style={styles.routeItem}>
-            <View style={[styles.routeLine, { backgroundColor: '#71717a' }]} />
-            <Text style={styles.routeText}>Standard Shortest Path</Text>
+
+          <View style={styles.drainageRow}>
+            <View style={[styles.nodeDot, { backgroundColor: Colors.capacityAmber }]} />
+            <Text style={styles.drainageText}>
+              <Text style={{ fontWeight: '700', color: Colors.capacityAmber }}>
+                Strained Node / Pipe:
+              </Text>{' '}
+              Capacity 50% – 85%
+            </Text>
+          </View>
+
+          <View style={styles.drainageRow}>
+            <View style={[styles.nodeDot, { backgroundColor: Colors.capacityRed }]} />
+            <Text style={styles.drainageText}>
+              <Text style={{ fontWeight: '700', color: Colors.capacityRed }}>
+                Surcharging Node / Pipe:
+              </Text>{' '}
+              Capacity {'>'} 85% / Surcharged
+            </Text>
+          </View>
+
+          <View style={styles.drainageRow}>
+            <MaterialCommunityIcons
+              name="navigation"
+              size={14}
+              color={Colors.cyan}
+              style={{ transform: [{ rotate: '45deg' }] }}
+            />
+            <Text style={styles.drainageText}>
+              <Text style={{ fontWeight: '700', color: Colors.cyan }}>
+                Flow Direction Arrows:
+              </Text>{' '}
+              Conduit water flow vector
+            </Text>
+          </View>
+
+          <View style={styles.drainageRow}>
+            <View style={styles.dashedLine} />
+            <Text style={styles.drainageText}>
+              <Text style={{ fontWeight: '700', color: Colors.capacityRed }}>
+                Dashed Conduits:
+              </Text>{' '}
+              Utilization {'>'} 85% overload
+            </Text>
           </View>
         </View>
       </View>
 
-      {/* Model Spec Card */}
-      <View style={styles.specCard}>
-        <View style={styles.specHeader}>
-          <MaterialCommunityIcons name="shield-lock-outline" size={14} color={Colors.gold} />
-          <Text style={styles.specTitle}>MODEL ARCHITECTURE</Text>
+      {/* Safe Routing Legend */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>SAFE NAVIGATION ROUTES</Text>
+
+        <View style={styles.routeLegendItem}>
+          <View style={[styles.routeLine, { backgroundColor: Colors.cyan }]} />
+          <View style={styles.routeDetails}>
+            <Text style={styles.routeLabel}>Flood-Aware Safe Route</Text>
+            <Text style={styles.routeDesc}>
+              Avoids high FSI risk corridors, minimizing flood depth exposure
+            </Text>
+          </View>
         </View>
-        <Text style={styles.specDetails}>
-          UNet Multi-spectral InSAR + DEM Topographic Hydrology Engine (SIH-2026 StrawHats).
-        </Text>
+
+        <View style={styles.routeLegendItem}>
+          <View
+            style={[
+              styles.routeLine,
+              { backgroundColor: '#94a3b8', borderStyle: 'dashed' },
+            ]}
+          />
+          <View style={styles.routeDetails}>
+            <Text style={styles.routeLabel}>Fastest Normal Route</Text>
+            <Text style={styles.routeDesc}>
+              Standard shortest driving distance without flood compensation
+            </Text>
+          </View>
+        </View>
       </View>
     </ScrollView>
   )
@@ -161,32 +229,32 @@ export function LegendSheet({ mapType, onToggleMapType }: LegendSheetProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.bgVoid,
   },
   content: {
     padding: 16,
     paddingBottom: 40,
   },
   section: {
-    marginBottom: 20,
+    marginBottom: 22,
   },
   sectionTitle: {
-    fontFamily: Fonts.monoBold,
-    fontSize: 10,
-    color: Colors.textSecondary,
-    letterSpacing: 0.8,
-    marginBottom: 8,
+    fontFamily: Fonts.mono,
+    fontSize: 11,
+    color: Colors.gold,
+    letterSpacing: 1,
+    fontWeight: '700',
+    marginBottom: 4,
   },
-  sectionDesc: {
-    fontFamily: Fonts.body,
-    fontSize: 12,
+  sectionSubtitle: {
+    fontFamily: Fonts.sans,
+    fontSize: 11,
     color: Colors.textSecondary,
     marginBottom: 12,
-    lineHeight: 16,
   },
   layerRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
+    marginTop: 6,
   },
   layerCard: {
     flex: 1,
@@ -194,23 +262,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: Colors.bgSecondary,
-    borderWidth: 1,
-    borderColor: Colors.borderSecondary,
-    borderRadius: 10,
     paddingVertical: 12,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   layerCardActive: {
-    backgroundColor: Colors.bgPanel,
+    backgroundColor: 'rgba(212, 175, 55, 0.15)',
     borderColor: Colors.gold,
   },
   layerCardActiveCyan: {
-    backgroundColor: Colors.bgPanel,
+    backgroundColor: 'rgba(0, 229, 255, 0.15)',
     borderColor: Colors.cyan,
   },
   layerCardText: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.sans,
     fontSize: 12,
+    fontWeight: '600',
     color: Colors.textSecondary,
   },
   layerCardTextActive: {
@@ -219,96 +288,109 @@ const styles = StyleSheet.create({
   layerCardTextActiveCyan: {
     color: Colors.cyan,
   },
-  legendList: {
+  fsiList: {
     gap: 10,
   },
-  legendItem: {
+  fsiItem: {
     flexDirection: 'row',
-    backgroundColor: Colors.bgSecondary,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.borderSecondary,
-    padding: 10,
     alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    borderRadius: 8,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
   },
-  colorIndicator: {
-    width: 14,
-    height: 14,
-    borderRadius: 4,
-    marginRight: 10,
+  fsiColorBar: {
+    width: 6,
+    height: 38,
+    borderRadius: 3,
+    marginRight: 12,
   },
-  legendInfo: {
+  fsiDetails: {
     flex: 1,
   },
-  legendHeaderRow: {
+  fsiTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 2,
   },
-  legendLabel: {
-    fontFamily: Fonts.monoBold,
+  fsiLabel: {
+    fontFamily: Fonts.sans,
     fontSize: 12,
+    fontWeight: '700',
     color: Colors.textPrimary,
   },
-  legendRange: {
+  fsiRange: {
     fontFamily: Fonts.mono,
-    fontSize: 10,
-    color: Colors.gold,
+    fontSize: 11,
+    fontWeight: '700',
   },
-  legendDesc: {
-    fontFamily: Fonts.body,
+  fsiDesc: {
+    fontFamily: Fonts.sans,
     fontSize: 11,
     color: Colors.textSecondary,
   },
-  routeLegendRow: {
-    flexDirection: 'column',
-    gap: 8,
-    backgroundColor: Colors.bgSecondary,
+  drainageLegendBox: {
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.borderSecondary,
     padding: 12,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.25)',
   },
-  routeItem: {
+  drainageRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  nodeDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  dashedLine: {
+    width: 14,
+    height: 2,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: Colors.capacityRed,
+  },
+  drainageText: {
+    fontFamily: Fonts.sans,
+    fontSize: 11,
+    color: Colors.textPrimary,
+    flex: 1,
+  },
+  routeLegendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
   },
   routeLine: {
     width: 24,
     height: 4,
     borderRadius: 2,
+    marginRight: 12,
   },
-  routeText: {
-    fontFamily: Fonts.mono,
-    fontSize: 11,
+  routeDetails: {
+    flex: 1,
+  },
+  routeLabel: {
+    fontFamily: Fonts.sans,
+    fontSize: 12,
+    fontWeight: '700',
     color: Colors.textPrimary,
+    marginBottom: 2,
   },
-  specCard: {
-    backgroundColor: Colors.bgPanel,
-    borderWidth: 1,
-    borderColor: Colors.borderPrimary,
-    borderRadius: 10,
-    padding: 12,
-    marginTop: 4,
-  },
-  specHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 4,
-  },
-  specTitle: {
-    fontFamily: Fonts.monoBold,
-    fontSize: 10,
-    color: Colors.gold,
-    letterSpacing: 0.5,
-  },
-  specDetails: {
-    fontFamily: Fonts.mono,
+  routeDesc: {
+    fontFamily: Fonts.sans,
     fontSize: 11,
     color: Colors.textSecondary,
-    lineHeight: 16,
   },
 })

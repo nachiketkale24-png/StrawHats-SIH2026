@@ -1,9 +1,16 @@
 /**
- * Flood API client — direct port of the web frontend's lib/floodApi.ts.
- * Includes enhanced Mumbai landmark auto-suggestions and Nominatim geocoding.
+ * Flood API client for the Mobile App.
+ * Parity with web frontend lib/floodApi.ts + backend FastAPI routers.
  */
 import { getApiBase } from './config'
-import type { RoutePoint } from '../types/flood'
+import type {
+  RoutePoint,
+  RainfallSource,
+  RiskTolerance,
+  DrainageResponse,
+} from '../types/flood'
+
+export type { DrainageResponse }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -30,15 +37,29 @@ export interface ApiRoute {
   length_m: number
   max_risk: number
   avg_risk: number
-  coordinates: [number, number][]
+  coordinates: [number, number][] // [[lon, lat], ...]
+}
+
+export interface ApiRouteLine {
+  type: 'LineString'
+  coordinates: [number, number][] // [[lon, lat], ...]
 }
 
 export interface RouteComparison {
   event_date: string
   normal_route: ApiRoute
-  flood_aware_route: ApiRoute
+  normal_distance_km: number
+  flood_aware_route?: ApiRoute
+  flood_aware_distance_km?: number
+  tolerance_route?: ApiRouteLine
+  tolerance_distance_km?: number
   extra_distance_m: number
   extra_distance_pct: number
+  detour_pct?: number
+  risk_tolerance?: RiskTolerance
+  max_risk_on_route: number
+  high_severe_segment_count: number
+  warning?: string | null
 }
 
 export interface GeocodeResult {
@@ -88,8 +109,12 @@ const MUMBAI_LANDMARKS: GeocodeResult[] = [
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-export function windowQuery(minutes?: number): string {
-  return minutes === undefined ? '' : `?window_minutes=${minutes}`
+export function windowQuery(minutes?: number, rainfallSource?: RainfallSource): string {
+  const query = new URLSearchParams()
+  if (minutes !== undefined) query.set('window_minutes', String(minutes))
+  if (rainfallSource) query.set('rainfall_source', rainfallSource)
+  const encoded = query.toString()
+  return encoded ? `?${encoded}` : ''
 }
 
 export async function apiRequest(
@@ -121,8 +146,13 @@ export async function apiRequest(
 
 // ─── API Functions ───────────────────────────────────────────────────────────
 
-export async function getEvents(signal?: AbortSignal): Promise<string[]> {
-  const events = await (await apiRequest('/flood/events', signal)).json()
+export async function getEvents(
+  signal?: AbortSignal,
+  rainfallSource: RainfallSource = 'observed'
+): Promise<string[]> {
+  const events = await (
+    await apiRequest(`/flood/events${windowQuery(undefined, rainfallSource)}`, signal)
+  ).json()
   if (
     !Array.isArray(events) ||
     !events.every((event: unknown) => typeof event === 'string')
@@ -134,11 +164,12 @@ export async function getEvents(signal?: AbortSignal): Promise<string[]> {
 
 export async function getWindows(
   event: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  rainfallSource: RainfallSource = 'observed'
 ): Promise<EventWindows> {
   return (
     await apiRequest(
-      `/flood/windows/${encodeURIComponent(event)}`,
+      `/flood/windows/${encodeURIComponent(event)}${windowQuery(undefined, rainfallSource)}`,
       signal
     )
   ).json()
@@ -147,11 +178,25 @@ export async function getWindows(
 export async function getSummary(
   event: string,
   signal?: AbortSignal,
-  minutes?: number
+  minutes?: number,
+  rainfallSource: RainfallSource = 'observed'
 ): Promise<EventSummary> {
   return (
     await apiRequest(
-      `/flood/summary/${encodeURIComponent(event)}${windowQuery(minutes)}`,
+      `/flood/summary/${encodeURIComponent(event)}${windowQuery(minutes, rainfallSource)}`,
+      signal
+    )
+  ).json()
+}
+
+export async function getDrainage(
+  event: string,
+  signal?: AbortSignal,
+  full = false
+): Promise<DrainageResponse> {
+  return (
+    await apiRequest(
+      `/drainage/${encodeURIComponent(event)}${full ? '?full=true' : ''}`,
       signal
     )
   ).json()
@@ -161,19 +206,73 @@ export async function getRoutes(
   event: string,
   start: RoutePoint,
   end: RoutePoint,
+  riskTolerance: RiskTolerance = 'low',
   signal?: AbortSignal,
-  minutes?: number
+  minutes?: number,
+  rainfallSource: RainfallSource = 'observed'
 ): Promise<RouteComparison> {
-  return (
+  const result = (await (
     await apiRequest('/route', signal, {
       event_date: event,
       origin_lat: start.lat,
       origin_lon: start.lng,
       dest_lat: end.lat,
       dest_lon: end.lng,
+      risk_tolerance: riskTolerance,
       window_minutes: minutes,
+      rainfall_source: rainfallSource,
     })
-  ).json()
+  ).json()) as Partial<RouteComparison> & {
+    normal_route: ApiRoute
+    flood_aware_route?: ApiRoute
+    tolerance_route?: ApiRouteLine
+  }
+
+  if (!result.normal_route || !Number.isFinite(result.normal_route.length_m)) {
+    throw new Error('Unexpected route response. Check API server.')
+  }
+
+  const fallbackRoute = result.flood_aware_route
+  const toleranceRoute =
+    result.tolerance_route?.type === 'LineString' &&
+    Array.isArray(result.tolerance_route.coordinates)
+      ? result.tolerance_route
+      : fallbackRoute
+      ? { type: 'LineString' as const, coordinates: fallbackRoute.coordinates }
+      : undefined
+
+  const normalDistanceKm =
+    result.normal_distance_km ?? result.normal_route.length_m / 1000
+  const toleranceDistanceKm =
+    result.tolerance_distance_km ??
+    (fallbackRoute ? fallbackRoute.length_m / 1000 : normalDistanceKm)
+
+  return {
+    event_date: result.event_date ?? event,
+    normal_route: result.normal_route,
+    normal_distance_km: Number(normalDistanceKm.toFixed(2)),
+    flood_aware_route: fallbackRoute,
+    flood_aware_distance_km: fallbackRoute
+      ? Number((fallbackRoute.length_m / 1000).toFixed(2))
+      : undefined,
+    tolerance_route: toleranceRoute,
+    tolerance_distance_km: Number(toleranceDistanceKm.toFixed(2)),
+    extra_distance_m:
+      result.extra_distance_m ??
+      Math.max(0, (toleranceDistanceKm - normalDistanceKm) * 1000),
+    extra_distance_pct:
+      result.extra_distance_pct ??
+      result.detour_pct ??
+      (normalDistanceKm > 0
+        ? ((toleranceDistanceKm - normalDistanceKm) / normalDistanceKm) * 100
+        : 0),
+    detour_pct: result.detour_pct,
+    risk_tolerance: result.risk_tolerance ?? riskTolerance,
+    max_risk_on_route:
+      result.max_risk_on_route ?? fallbackRoute?.max_risk ?? result.normal_route.max_risk,
+    high_severe_segment_count: result.high_severe_segment_count ?? 0,
+    warning: result.warning ?? null,
+  }
 }
 
 export async function getPointValue(
@@ -181,9 +280,20 @@ export async function getPointValue(
   lon: number,
   lat: number,
   signal?: AbortSignal,
-  windowMinutes?: number
-): Promise<{ event_date: string; lon: number; lat: number; fsi: number | null; in_station_network?: boolean }> {
-  const query = new URLSearchParams({ lon: String(lon), lat: String(lat) })
+  windowMinutes?: number,
+  rainfallSource: RainfallSource = 'observed'
+): Promise<{
+  event_date: string
+  lon: number
+  lat: number
+  fsi: number | null
+  in_station_network?: boolean
+}> {
+  const query = new URLSearchParams({
+    lon: String(lon),
+    lat: String(lat),
+    rainfall_source: rainfallSource,
+  })
   if (windowMinutes !== undefined) query.set('window_minutes', String(windowMinutes))
   return (
     await apiRequest(
@@ -217,7 +327,9 @@ export async function geocodeAddress(
   // Check local database first for instant matches
   const lower = raw.toLowerCase()
   const localMatch = MUMBAI_LANDMARKS.find(
-    (l) => l.displayName.toLowerCase().includes(lower) || lower.includes(l.displayName.split(',')[0].toLowerCase())
+    (l) =>
+      l.displayName.toLowerCase().includes(lower) ||
+      lower.includes(l.displayName.split(',')[0].toLowerCase())
   )
   if (localMatch) {
     return localMatch
@@ -282,7 +394,13 @@ export async function geocodeSuggest(
         // Merge and deduplicate
         const combined = [...localMatches]
         for (const item of remoteMatches) {
-          if (!combined.some((c) => Math.abs(c.lat - item.lat) < 0.001 && Math.abs(c.lng - item.lng) < 0.001)) {
+          if (
+            !combined.some(
+              (c) =>
+                Math.abs(c.lat - item.lat) < 0.001 &&
+                Math.abs(c.lng - item.lng) < 0.001
+            )
+          ) {
             combined.push(item)
           }
         }

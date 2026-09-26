@@ -1,8 +1,8 @@
 /**
- * Routes bottom sheet panel matching the web frontend's Routes tab.
+ * Routes bottom sheet panel for the Mobile App.
+ * Matches web frontend's Routes tab.
  * Includes address lookup, GPS location, preset destinations, pick on map toggle,
- * route computation, and comprehensive flood-aware vs shortest route comparisons.
- * Fixed zIndex stacking so suggestions dropdown never mixes with destination inputs.
+ * Risk Tolerance controls (Low / Balanced / High), and comprehensive route comparisons.
  */
 import React, { useState } from 'react'
 import {
@@ -16,8 +16,12 @@ import {
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import * as Location from 'expo-location'
 import { AddressInput } from './AddressInput'
-import { geocodeAddress, type RouteComparison, type GeocodeResult } from '../api/floodApi'
-import type { RoutePoint, MapMode } from '../types/flood'
+import {
+  geocodeAddress,
+  type RouteComparison,
+  type GeocodeResult,
+} from '../api/floodApi'
+import type { RoutePoint, MapMode, RiskTolerance } from '../types/flood'
 import { Colors, Fonts } from '../theme'
 
 interface RoutesSheetProps {
@@ -25,6 +29,8 @@ interface RoutesSheetProps {
   onSelectRouteMode: (mode: MapMode) => void
   routeStart: RoutePoint | null
   routeEnd: RoutePoint | null
+  riskTolerance: RiskTolerance
+  onSelectRiskTolerance: (tol: RiskTolerance) => void
   routeComparison: RouteComparison | null
   isRouting: boolean
   routeError: string | null
@@ -47,6 +53,8 @@ export function RoutesSheet({
   onSelectRouteMode,
   routeStart,
   routeEnd,
+  riskTolerance,
+  onSelectRiskTolerance,
   routeComparison,
   isRouting,
   routeError,
@@ -113,11 +121,15 @@ export function RoutesSheet({
       ])
 
       if (!resA) {
-        setLocalError(`Location not found: "${startText}". Try adding "Mumbai" or using a landmark.`)
+        setLocalError(
+          `Location not found: "${startText}". Try adding "Mumbai" or using a landmark.`
+        )
         return
       }
       if (!resB) {
-        setLocalError(`Location not found: "${endText}". Try adding "Mumbai" or using a landmark.`)
+        setLocalError(
+          `Location not found: "${endText}". Try adding "Mumbai" or using a landmark.`
+        )
         return
       }
 
@@ -139,6 +151,19 @@ export function RoutesSheet({
     setLocalError(null)
     onClearRoute()
   }
+
+  const safeDistKm =
+    routeComparison?.tolerance_distance_km ??
+    routeComparison?.flood_aware_distance_km ??
+    (routeComparison?.flood_aware_route?.length_m
+      ? routeComparison.flood_aware_route.length_m / 1000
+      : routeComparison?.normal_distance_km ?? 0)
+
+  const normalDistKm =
+    routeComparison?.normal_distance_km ??
+    (routeComparison?.normal_route?.length_m
+      ? routeComparison.normal_route.length_m / 1000
+      : 0)
 
   return (
     <ScrollView
@@ -193,10 +218,80 @@ export function RoutesSheet({
         </TouchableOpacity>
       </View>
 
+      {/* Risk Tolerance Selector */}
+      <View style={styles.riskTolSection}>
+        <View style={styles.riskTolHeader}>
+          <Ionicons name="shield-outline" size={13} color={Colors.cyan} />
+          <Text style={styles.riskTolTitle}>FLOOD RISK TOLERANCE</Text>
+        </View>
+
+        <View style={styles.riskTolRow}>
+          <TouchableOpacity
+            style={[
+              styles.riskTolChip,
+              riskTolerance === 'low' && styles.riskTolChipActive,
+            ]}
+            onPress={() => onSelectRiskTolerance('low')}
+            activeOpacity={0.8}
+          >
+            <Text
+              style={[
+                styles.riskTolText,
+                riskTolerance === 'low' && styles.riskTolTextActive,
+              ]}
+            >
+              Min Risk
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.riskTolChip,
+              riskTolerance === 'medium' && styles.riskTolChipActiveGold,
+            ]}
+            onPress={() => onSelectRiskTolerance('medium')}
+            activeOpacity={0.8}
+          >
+            <Text
+              style={[
+                styles.riskTolText,
+                riskTolerance === 'medium' && styles.riskTolTextActiveGold,
+              ]}
+            >
+              Balanced
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.riskTolChip,
+              (riskTolerance === 'high' || riskTolerance === 'severe') &&
+                styles.riskTolChipActiveRed,
+            ]}
+            onPress={() => onSelectRiskTolerance('high')}
+            activeOpacity={0.8}
+          >
+            <Text
+              style={[
+                styles.riskTolText,
+                (riskTolerance === 'high' || riskTolerance === 'severe') &&
+                  styles.riskTolTextActiveRed,
+              ]}
+            >
+              Fastest
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {/* Mode Instructions for Pick-on-map */}
       {!isAddressMode ? (
         <View style={styles.pickGuideCard}>
-          <Ionicons name="information-circle-outline" size={18} color={Colors.cyan} />
+          <Ionicons
+            name="information-circle-outline"
+            size={18}
+            color={Colors.cyan}
+          />
           <View style={styles.pickGuideTextWrap}>
             <Text style={styles.pickGuideTitle}>Map Pick Mode Active</Text>
             <Text style={styles.pickGuideSubtitle}>
@@ -211,8 +306,12 @@ export function RoutesSheet({
       ) : (
         /* Address Mode Form */
         <View style={styles.formContainer}>
-          {/* Input A with high stacking context */}
-          <View style={{ zIndex: isFocusedA ? 1000 : 20, elevation: isFocusedA ? 1000 : 20 }}>
+          <View
+            style={{
+              zIndex: isFocusedA ? 1000 : 20,
+              elevation: isFocusedA ? 1000 : 20,
+            }}
+          >
             <AddressInput
               label="A"
               placeholder="Origin / Start location"
@@ -237,7 +336,11 @@ export function RoutesSheet({
               {locatingGPS ? (
                 <ActivityIndicator size="small" color={Colors.cyan} />
               ) : (
-                <Ionicons name="navigate-outline" size={13} color={Colors.cyan} />
+                <Ionicons
+                  name="navigate-outline"
+                  size={13}
+                  color={Colors.cyan}
+                />
               )}
               <Text style={styles.gpsBtnText}>Use Current GPS</Text>
             </TouchableOpacity>
@@ -251,8 +354,12 @@ export function RoutesSheet({
             </TouchableOpacity>
           </View>
 
-          {/* Input B with high stacking context */}
-          <View style={{ zIndex: isFocusedB ? 1000 : 5, elevation: isFocusedB ? 1000 : 5 }}>
+          <View
+            style={{
+              zIndex: isFocusedB ? 1000 : 5,
+              elevation: isFocusedB ? 1000 : 5,
+            }}
+          >
             <AddressInput
               label="B"
               placeholder="Destination in Mumbai"
@@ -299,7 +406,8 @@ export function RoutesSheet({
           <TouchableOpacity
             style={[
               styles.computeBtn,
-              (isRouting || !startText.trim() || !endText.trim()) && styles.computeBtnDisabled,
+              (isRouting || !startText.trim() || !endText.trim()) &&
+                styles.computeBtnDisabled,
             ]}
             onPress={handleAddressSubmit}
             disabled={isRouting || !startText.trim() || !endText.trim()}
@@ -307,7 +415,9 @@ export function RoutesSheet({
             {isRouting ? (
               <View style={styles.btnRow}>
                 <ActivityIndicator size="small" color="#000" />
-                <Text style={styles.computeBtnText}>COMPUTING SAFE ROUTE...</Text>
+                <Text style={styles.computeBtnText}>
+                  COMPUTING SAFE ROUTE...
+                </Text>
               </View>
             ) : (
               <View style={styles.btnRow}>
@@ -325,7 +435,11 @@ export function RoutesSheet({
           <View style={styles.comparisonHeader}>
             <View style={styles.badgeRow}>
               <View style={styles.safeTag}>
-                <Ionicons name="shield-checkmark" size={12} color={Colors.cyan} />
+                <Ionicons
+                  name="shield-checkmark"
+                  size={12}
+                  color={Colors.cyan}
+                />
                 <Text style={styles.safeTagText}>FLOOD AVOIDANCE ROUTE</Text>
               </View>
             </View>
@@ -335,45 +449,60 @@ export function RoutesSheet({
             </TouchableOpacity>
           </View>
 
+          {/* Warning Banner */}
+          {routeComparison.warning && (
+            <View style={styles.warningBanner}>
+              <Ionicons name="alert-circle" size={14} color={Colors.capacityAmber} />
+              <Text style={styles.warningBannerText}>
+                {routeComparison.warning}
+              </Text>
+            </View>
+          )}
+
           {/* Metrics Grid */}
           <View style={styles.metricsGrid}>
             <View style={styles.metricCol}>
               <Text style={styles.metricLabel}>SAFE DISTANCE</Text>
               <Text style={styles.metricValCyan}>
-                {(routeComparison.flood_aware_route.length_m / 1000).toFixed(1)} km
+                {safeDistKm.toFixed(1)} km
               </Text>
             </View>
 
             <View style={styles.metricCol}>
-              <Text style={styles.metricLabel}>AVG FLOOD RISK</Text>
+              <Text style={styles.metricLabel}>DETOUR</Text>
               <Text style={styles.metricVal}>
-                {(routeComparison.flood_aware_route.avg_risk * 100).toFixed(0)}%
+                +{routeComparison.extra_distance_pct.toFixed(0)}%
               </Text>
             </View>
 
             <View style={styles.metricCol}>
-              <Text style={styles.metricLabel}>RISK REDUCTION</Text>
-              <Text style={styles.metricValGreen}>
-                {Math.max(
-                  0,
-                  Math.round(
-                    ((routeComparison.normal_route.avg_risk - routeComparison.flood_aware_route.avg_risk) /
-                      (routeComparison.normal_route.avg_risk || 1)) *
-                      100
-                  )
-                )}
-                %
+              <Text style={styles.metricLabel}>PEAK FSI RISK</Text>
+              <Text
+                style={[
+                  styles.metricVal,
+                  {
+                    color:
+                      routeComparison.max_risk_on_route > 0.5
+                        ? Colors.capacityRed
+                        : Colors.statusNormal,
+                  },
+                ]}
+              >
+                {(routeComparison.max_risk_on_route * 100).toFixed(0)}%
               </Text>
             </View>
           </View>
 
-          {/* Comparison Bar */}
+          {/* Comparison Sub-row */}
           <View style={styles.comparisonRow}>
             <View style={styles.compBarItem}>
               <View style={[styles.dot, { backgroundColor: '#888' }]} />
               <Text style={styles.compSub}>
-                Shortest: {(routeComparison.normal_route.length_m / 1000).toFixed(1)} km (Risk:{' '}
-                {(routeComparison.normal_route.avg_risk * 100).toFixed(0)}%)
+                Normal Shortest Route: {normalDistKm.toFixed(1)} km (
+                {routeComparison.high_severe_segment_count > 0
+                  ? `${routeComparison.high_severe_segment_count} severe flood segments avoided`
+                  : 'Fastest baseline path'}
+                )
               </Text>
             </View>
           </View>
@@ -403,7 +532,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bgSecondary,
     borderRadius: 10,
     padding: 3,
-    marginBottom: 16,
+    marginBottom: 14,
     borderWidth: 1,
     borderColor: Colors.borderSecondary,
     zIndex: 1,
@@ -434,6 +563,63 @@ const styles = StyleSheet.create({
   segmentTextActiveCyan: {
     color: Colors.cyan,
   },
+  riskTolSection: {
+    marginBottom: 14,
+  },
+  riskTolHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  riskTolTitle: {
+    fontFamily: Fonts.mono,
+    fontSize: 10,
+    color: Colors.cyan,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  riskTolRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  riskTolChip: {
+    flex: 1,
+    paddingVertical: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  riskTolChipActive: {
+    backgroundColor: 'rgba(0, 229, 255, 0.15)',
+    borderColor: Colors.cyan,
+  },
+  riskTolChipActiveGold: {
+    backgroundColor: 'rgba(212, 175, 55, 0.15)',
+    borderColor: Colors.gold,
+  },
+  riskTolChipActiveRed: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderColor: Colors.capacityRed,
+  },
+  riskTolText: {
+    fontFamily: Fonts.sans,
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  riskTolTextActive: {
+    color: Colors.cyan,
+  },
+  riskTolTextActiveGold: {
+    color: Colors.gold,
+  },
+  riskTolTextActiveRed: {
+    color: Colors.capacityRed,
+  },
   pickGuideCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -449,20 +635,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   pickGuideTitle: {
-    fontFamily: Fonts.monoBold,
-    fontSize: 12,
+    fontFamily: Fonts.sans,
+    fontSize: 13,
+    fontWeight: '700',
     color: Colors.cyan,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   pickGuideSubtitle: {
-    fontFamily: Fonts.body,
-    fontSize: 12,
-    color: Colors.textPrimary,
-    lineHeight: 17,
+    fontFamily: Fonts.sans,
+    fontSize: 11,
+    color: Colors.textSecondary,
   },
   formContainer: {
     gap: 10,
-    position: 'relative',
   },
   actionRow: {
     flexDirection: 'row',
@@ -473,22 +658,24 @@ const styles = StyleSheet.create({
   gpsBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
+    paddingVertical: 5,
   },
   gpsBtnText: {
     fontFamily: Fonts.mono,
     fontSize: 11,
     color: Colors.cyan,
+    fontWeight: '600',
   },
   swapBtn: {
     width: 28,
     height: 28,
-    borderRadius: 6,
-    backgroundColor: Colors.bgSecondary,
-    borderWidth: 1,
-    borderColor: Colors.borderSecondary,
+    borderRadius: 14,
+    backgroundColor: 'rgba(212, 175, 55, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
   },
   presetsSection: {
     marginTop: 4,
@@ -497,13 +684,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   presetsTitle: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.mono,
     fontSize: 10,
-    color: Colors.textSecondary,
-    letterSpacing: 0.8,
+    color: Colors.gold,
+    letterSpacing: 1,
   },
   presetsGrid: {
     flexDirection: 'row',
@@ -511,49 +698,44 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   presetChip: {
-    backgroundColor: Colors.bgSecondary,
-    borderWidth: 1,
-    borderColor: Colors.borderSecondary,
-    paddingHorizontal: 9,
+    backgroundColor: 'rgba(15, 23, 42, 0.7)',
+    paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   presetChipText: {
-    fontFamily: Fonts.body,
+    fontFamily: Fonts.sans,
     fontSize: 11,
-    color: Colors.textSecondary,
+    color: Colors.textPrimary,
   },
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    gap: 8,
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    padding: 10,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: 'rgba(239, 68, 68, 0.3)',
-    borderRadius: 8,
-    padding: 10,
-    gap: 8,
   },
   errorText: {
-    flex: 1,
-    fontFamily: Fonts.body,
+    fontFamily: Fonts.sans,
     fontSize: 11,
     color: '#f87171',
+    flex: 1,
   },
   computeBtn: {
     backgroundColor: Colors.gold,
-    borderRadius: 10,
-    paddingVertical: 12,
+    paddingVertical: 13,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 4,
-    shadowColor: Colors.gold,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
+    marginTop: 6,
   },
   computeBtnDisabled: {
-    opacity: 0.5,
+    opacity: 0.4,
   },
   btnRow: {
     flexDirection: 'row',
@@ -561,19 +743,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   computeBtnText: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.mono,
     fontSize: 12,
-    color: '#04040a',
     fontWeight: '800',
+    color: '#04040a',
     letterSpacing: 0.5,
   },
   comparisonCard: {
-    marginTop: 18,
-    backgroundColor: Colors.bgPanel,
-    borderWidth: 1,
-    borderColor: Colors.borderPrimary,
+    backgroundColor: 'rgba(15, 23, 42, 0.8)',
     borderRadius: 12,
     padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 229, 255, 0.3)',
+    marginTop: 16,
   },
   comparisonHeader: {
     flexDirection: 'row',
@@ -588,63 +770,74 @@ const styles = StyleSheet.create({
   safeTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(0, 229, 255, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 229, 255, 0.3)',
-    borderRadius: 6,
+    gap: 5,
+    backgroundColor: 'rgba(0, 229, 255, 0.15)',
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
   safeTagText: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.mono,
     fontSize: 10,
+    fontWeight: '700',
     color: Colors.cyan,
   },
   viewMapPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingVertical: 2,
   },
   viewMapText: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.sans,
     fontSize: 11,
     color: Colors.gold,
+    fontWeight: '600',
+  },
+  warningBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    padding: 8,
+    borderRadius: 6,
+    marginBottom: 10,
+  },
+  warningBannerText: {
+    fontFamily: Fonts.sans,
+    fontSize: 11,
+    color: Colors.capacityAmber,
+    flex: 1,
   },
   metricsGrid: {
     flexDirection: 'row',
-    backgroundColor: Colors.bgSecondary,
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 10,
+    justifyContent: 'space-around',
+    marginBottom: 12,
   },
   metricCol: {
-    flex: 1,
     alignItems: 'center',
   },
   metricLabel: {
     fontFamily: Fonts.mono,
     fontSize: 9,
     color: Colors.textSecondary,
-    marginBottom: 4,
-  },
-  metricVal: {
-    fontFamily: Fonts.monoBold,
-    fontSize: 14,
-    color: Colors.textPrimary,
+    marginBottom: 2,
   },
   metricValCyan: {
-    fontFamily: Fonts.monoBold,
-    fontSize: 14,
+    fontFamily: Fonts.mono,
+    fontSize: 16,
+    fontWeight: '800',
     color: Colors.cyan,
   },
-  metricValGreen: {
-    fontFamily: Fonts.monoBold,
-    fontSize: 14,
-    color: '#34d399',
+  metricVal: {
+    fontFamily: Fonts.mono,
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.textPrimary,
   },
   comparisonRow: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+    paddingTop: 8,
     marginBottom: 10,
   },
   compBarItem: {
@@ -658,9 +851,10 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   compSub: {
-    fontFamily: Fonts.mono,
+    fontFamily: Fonts.sans,
     fontSize: 11,
     color: Colors.textSecondary,
+    flex: 1,
   },
   clearBtn: {
     flexDirection: 'row',
@@ -668,13 +862,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 8,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
-    borderRadius: 8,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
   },
   clearBtnText: {
     fontFamily: Fonts.mono,
     fontSize: 11,
     color: '#f87171',
+    fontWeight: '600',
   },
 })

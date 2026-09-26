@@ -5,61 +5,96 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Linking,
   ActivityIndicator,
+  Switch,
 } from 'react-native'
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import { Colors, Fonts, FontSizes } from '../theme'
-import { API_BASE } from '../api/config'
-import { windowQuery } from '../api/floodApi'
-import type { EventSummary, EventWindows, EventWindow } from '../api/floodApi'
+import type {
+  EventSummary,
+  EventWindows,
+  EventWindow,
+  DrainageResponse,
+} from '../api/floodApi'
+import type { RainfallSource } from '../types/flood'
 
 interface Props {
   events: string[]
   event: string
+  rainfallSource: RainfallSource
   eventsLoading: boolean
   windows: EventWindows | null
   minutes: number
   activeWindow: EventWindow | undefined
   summary: EventSummary | null
+  drainageSummary: DrainageResponse['summary'] | null
+  drainageStatus: string
+  showFullDrainage: boolean
   intervalReady: boolean
   selectedMinutes: number | undefined
   disabled: boolean
   onSelectEvent: (date: string) => void
+  onSelectRainfallSource: (source: RainfallSource) => void
   onSelectMinutes: (val: number) => void
+  onToggleFullDrainage: () => void
   onRefresh: () => void
 }
 
 const WINDOW_VALUES = [15, 30, 60, 90, 120, 180]
 
 function formatEventLabel(dateStr: string): { title: string; subtitle: string } {
-  if (dateStr === '2023-07-26') return { title: '2023-07-26', subtitle: '26 Jul 2023 · Extreme Inundation' }
-  if (dateStr === '2020-08-04') return { title: '2020-08-04', subtitle: '04 Aug 2020 · High Precipitation' }
-  if (dateStr === '2019-09-04') return { title: '2019-09-04', subtitle: '04 Sep 2019 · Monsoon Inundation' }
-  
+  if (dateStr === '2023-07-26')
+    return { title: '2023-07-26', subtitle: '26 Jul 2023 · Extreme Inundation' }
+  if (dateStr === '2020-08-04')
+    return { title: '2020-08-04', subtitle: '04 Aug 2020 · High Precipitation' }
+  if (dateStr === '2019-09-04')
+    return { title: '2019-09-04', subtitle: '04 Sep 2019 · Monsoon Inundation' }
+
   const parts = dateStr.split('-')
   if (parts.length === 3) {
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    const monthNames = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ]
     const mIdx = parseInt(parts[1], 10) - 1
     const mName = monthNames[mIdx] || parts[1]
-    return { title: dateStr, subtitle: `${parts[2]} ${mName} ${parts[0]} · Historical Event` }
+    return {
+      title: dateStr,
+      subtitle: `${parts[2]} ${mName} ${parts[0]} · Historical Event`,
+    }
   }
-  return { title: dateStr, subtitle: 'Historical Flood Dataset' }
+  return { title: dateStr, subtitle: 'Flood Dataset' }
 }
 
 export default function EventsSheet({
   events,
   event,
+  rainfallSource,
   eventsLoading,
   windows,
   minutes,
   activeWindow,
   summary,
+  drainageSummary,
+  drainageStatus,
+  showFullDrainage,
   intervalReady,
   selectedMinutes,
   disabled,
   onSelectEvent,
+  onSelectRainfallSource,
   onSelectMinutes,
+  onToggleFullDrainage,
   onRefresh,
 }: Props) {
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -72,17 +107,87 @@ export default function EventsSheet({
       showsVerticalScrollIndicator={false}
       nestedScrollEnabled
     >
-      {/* SECTION 1: Historical Date Selection Dropdown */}
+      {/* SECTION 1: Rainfall Source Selector (Observed vs Nowcast) */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeaderRow}>
+          <View style={styles.sectionTitleWrap}>
+            <MaterialCommunityIcons
+              name="weather-partly-rainy"
+              size={14}
+              color={Colors.gold}
+            />
+            <Text style={styles.sectionTitle}>RAINFALL DATA SOURCE</Text>
+          </View>
+        </View>
+
+        <View style={styles.sourceToggleRow}>
+          <TouchableOpacity
+            style={[
+              styles.sourceBtn,
+              rainfallSource === 'observed' && styles.sourceBtnActive,
+            ]}
+            onPress={() => onSelectRainfallSource('observed')}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name="cloudy-night-outline"
+              size={14}
+              color={
+                rainfallSource === 'observed'
+                  ? Colors.gold
+                  : Colors.textSecondary
+              }
+            />
+            <Text
+              style={[
+                styles.sourceBtnText,
+                rainfallSource === 'observed' && styles.sourceBtnTextActive,
+              ]}
+            >
+              Observed Stations
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.sourceBtn,
+              rainfallSource === 'nowcast' && styles.sourceBtnActiveCyan,
+            ]}
+            onPress={() => onSelectRainfallSource('nowcast')}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name="analytics-outline"
+              size={14}
+              color={
+                rainfallSource === 'nowcast'
+                  ? Colors.cyan
+                  : Colors.textSecondary
+              }
+            />
+            <Text
+              style={[
+                styles.sourceBtnText,
+                rainfallSource === 'nowcast' && styles.sourceBtnTextActiveCyan,
+              ]}
+            >
+              AI / Nowcast
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* SECTION 2: Event Date Selection Dropdown */}
       <View style={styles.section}>
         <View style={styles.sectionHeaderRow}>
           <View style={styles.sectionTitleWrap}>
             <Ionicons name="calendar" size={13} color={Colors.gold} />
-            <Text style={styles.sectionTitle}>HISTORICAL FLOOD EVENT</Text>
+            <Text style={styles.sectionTitle}>FLOOD EVENT TIMELINE</Text>
           </View>
           {eventsLoading && (
             <View style={styles.loadingPill}>
               <ActivityIndicator size="small" color={Colors.gold} />
-              <Text style={styles.loadingPillText}>UPDATING</Text>
+              <Text style={styles.loadingPillText}>SYNCING</Text>
             </View>
           )}
         </View>
@@ -90,21 +195,33 @@ export default function EventsSheet({
         {/* Dropdown Selector Row */}
         <View style={styles.dropdownRow}>
           <TouchableOpacity
-            style={[styles.dropdownTrigger, dropdownOpen && styles.dropdownTriggerActive]}
+            style={[
+              styles.dropdownTrigger,
+              dropdownOpen && styles.dropdownTriggerActive,
+            ]}
             onPress={() => setDropdownOpen((prev) => !prev)}
             activeOpacity={0.8}
             disabled={eventsLoading || events.length === 0}
           >
             <View style={styles.dropdownLeft}>
               <View style={styles.calendarIconBox}>
-                <Ionicons name="calendar-outline" size={16} color={Colors.gold} />
+                <Ionicons
+                  name="calendar-outline"
+                  size={16}
+                  color={Colors.gold}
+                />
               </View>
               <View style={styles.dropdownTextWrap}>
                 <Text style={styles.dropdownDateText}>
-                  {event || (eventsLoading ? 'Loading events...' : 'Select an event date')}
+                  {event ||
+                    (eventsLoading
+                      ? 'Loading events...'
+                      : 'No events available')}
                 </Text>
                 <Text style={styles.dropdownSubtext} numberOfLines={1}>
-                  {event ? currentEventInfo.subtitle : 'Choose historical rainfall timeline'}
+                  {event
+                    ? currentEventInfo.subtitle
+                    : 'Choose rainfall scenario'}
                 </Text>
               </View>
             </View>
@@ -118,193 +235,254 @@ export default function EventsSheet({
             </View>
           </TouchableOpacity>
 
-          {/* Refresh Button */}
-          <TouchableOpacity
-            style={styles.refreshBtn}
-            onPress={onRefresh}
-            disabled={eventsLoading}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name="refresh"
-              size={17}
-              color={eventsLoading ? Colors.textSecondary : Colors.gold}
-            />
-          </TouchableOpacity>
-        </View>
-
-        {/* Dropdown Menu Options */}
-        {dropdownOpen && (
-          <View style={styles.dropdownMenu}>
-            {events.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>
-                  {eventsLoading ? 'Loading historical events…' : 'No events available'}
-                </Text>
-              </View>
-            ) : (
-              events.map((dateStr, idx) => {
-                const info = formatEventLabel(dateStr)
-                const isSelected = event === dateStr
+          {/* Expanded Event List */}
+          {dropdownOpen && (
+            <View style={styles.dropdownList}>
+              {events.map((dateStr) => {
+                const isSelected = dateStr === event
+                const label = formatEventLabel(dateStr)
                 return (
                   <TouchableOpacity
                     key={dateStr}
                     style={[
                       styles.dropdownItem,
                       isSelected && styles.dropdownItemActive,
-                      idx === events.length - 1 && styles.dropdownItemLast,
                     ]}
                     onPress={() => {
                       onSelectEvent(dateStr)
                       setDropdownOpen(false)
                     }}
-                    activeOpacity={0.7}
+                    activeOpacity={0.8}
                   >
                     <View style={styles.dropdownItemLeft}>
                       <View
                         style={[
-                          styles.radioDot,
-                          isSelected && styles.radioDotActive,
+                          styles.dateBullet,
+                          isSelected && styles.dateBulletActive,
                         ]}
-                      >
-                        {isSelected && <View style={styles.radioDotInner} />}
-                      </View>
-                      <View style={styles.itemTextWrap}>
+                      />
+                      <View>
                         <Text
                           style={[
-                            styles.itemDateText,
-                            isSelected && styles.itemDateTextActive,
+                            styles.dropdownItemTitle,
+                            isSelected && styles.dropdownItemTitleActive,
                           ]}
                         >
-                          {info.title}
+                          {label.title}
                         </Text>
-                        <Text style={styles.itemSubText}>{info.subtitle}</Text>
+                        <Text style={styles.dropdownItemSub}>
+                          {label.subtitle}
+                        </Text>
                       </View>
                     </View>
-
                     {isSelected && (
-                      <View style={styles.checkBadge}>
-                        <Ionicons name="checkmark" size={14} color={Colors.goldLight} />
-                      </View>
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={18}
+                        color={Colors.gold}
+                      />
                     )}
                   </TouchableOpacity>
                 )
-              })
-            )}
-          </View>
-        )}
-      </View>
-
-      {/* SECTION 2: Accumulation Window Buttons */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeaderRow}>
-          <View style={styles.sectionTitleWrap}>
-            <MaterialCommunityIcons name="clock-outline" size={13} color={Colors.cyan} />
-            <Text style={styles.sectionTitle}>ACCUMULATION WINDOW</Text>
-          </View>
-
-          {activeWindow && (
-            <View style={styles.timeRangePill}>
-              <View style={styles.timeRangeDot} />
-              <Text style={styles.timeRangeText}>
-                {activeWindow.start_time.slice(11, 16)} → {activeWindow.end_time.slice(11, 16)}
-              </Text>
+              })}
             </View>
           )}
         </View>
+      </View>
 
-        <View style={styles.intervalGrid}>
-          {WINDOW_VALUES.map((val) => {
-            const available = windows?.windows.some((w) => w.minutes === val)
-            const isActive = !!activeWindow && val === minutes
+      {/* SECTION 3: Accumulation Window Selector */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeaderRow}>
+          <View style={styles.sectionTitleWrap}>
+            <Ionicons name="time" size={13} color={Colors.cyan} />
+            <Text style={styles.sectionTitle}>ACCUMULATION WINDOW</Text>
+          </View>
+          {activeWindow && (
+            <Text style={styles.windowTimeBasis}>
+              {activeWindow.start_time} → {activeWindow.end_time}
+            </Text>
+          )}
+        </View>
+
+        <View style={styles.windowPillsGrid}>
+          {WINDOW_VALUES.map((wVal) => {
+            const isSelected = minutes === wVal
+            const isAvail =
+              windows?.windows.some((w) => w.minutes === wVal) ?? true
+
             return (
               <TouchableOpacity
-                key={val}
+                key={wVal}
                 style={[
-                  styles.intervalBtn,
-                  isActive && styles.intervalBtnActive,
-                  (!available || disabled) && styles.intervalBtnDisabled,
+                  styles.windowPill,
+                  isSelected && styles.windowPillActive,
+                  !isAvail && styles.windowPillDisabled,
                 ]}
-                onPress={() => onSelectMinutes(val)}
-                disabled={disabled || !available}
-                activeOpacity={0.7}
+                onPress={() => isAvail && onSelectMinutes(wVal)}
+                disabled={!isAvail || disabled}
+                activeOpacity={0.8}
               >
                 <Text
                   style={[
-                    styles.intervalBtnText,
-                    isActive && styles.intervalBtnTextActive,
+                    styles.windowPillValue,
+                    isSelected && styles.windowPillValueActive,
                   ]}
                 >
-                  {val} min
+                  {wVal}
                 </Text>
-                {isActive && <View style={styles.intervalActiveDot} />}
+                <Text
+                  style={[
+                    styles.windowPillUnit,
+                    isSelected && styles.windowPillUnitActive,
+                  ]}
+                >
+                  MIN
+                </Text>
               </TouchableOpacity>
             )
           })}
         </View>
       </View>
 
-      {/* SECTION 3: Event Summary Index Stats */}
+      {/* SECTION 4: Drainage Network Controls & Metrics */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeaderRow}>
+          <View style={styles.sectionTitleWrap}>
+            <MaterialCommunityIcons
+              name="pipe"
+              size={15}
+              color={Colors.statusNormal}
+            />
+            <Text style={styles.sectionTitle}>DRAINAGE NETWORK</Text>
+          </View>
+          {drainageStatus ? (
+            <Text style={styles.drainageStatusText}>{drainageStatus}</Text>
+          ) : null}
+        </View>
+
+        <View style={styles.drainageCard}>
+          {drainageSummary ? (
+            <View style={styles.drainageMetricsRow}>
+              <View style={styles.drainageMetric}>
+                <Text style={styles.metricVal}>
+                  <Text
+                    style={{
+                      color:
+                        drainageSummary.surcharged_manholes > 0
+                          ? Colors.capacityRed
+                          : Colors.statusNormal,
+                    }}
+                  >
+                    {drainageSummary.surcharged_manholes}
+                  </Text>
+                  {' / '}
+                  {drainageSummary.total_manholes}
+                </Text>
+                <Text style={styles.metricLabel}>Surcharged Manholes</Text>
+              </View>
+
+              <View style={styles.metricDivider} />
+
+              <View style={styles.drainageMetric}>
+                <Text style={styles.metricVal}>
+                  <Text
+                    style={{
+                      color:
+                        drainageSummary.surcharged_conduits > 0
+                          ? Colors.capacityRed
+                          : Colors.statusNormal,
+                    }}
+                  >
+                    {drainageSummary.surcharged_conduits}
+                  </Text>
+                  {' / '}
+                  {drainageSummary.total_conduits}
+                </Text>
+                <Text style={styles.metricLabel}>Surcharged Conduits</Text>
+              </View>
+            </View>
+          ) : (
+            <Text style={styles.drainageEmptyText}>
+              {drainageStatus || 'Drainage status unavailable for this event.'}
+            </Text>
+          )}
+
+          {/* Full Network Switch */}
+          <View style={styles.fullDrainageToggleRow}>
+            <View style={styles.toggleLeft}>
+              <MaterialCommunityIcons
+                name="vector-polyline"
+                size={16}
+                color={Colors.cyan}
+              />
+              <Text style={styles.toggleText}>
+                Show full drainage network (34k+ points)
+              </Text>
+            </View>
+            <Switch
+              value={showFullDrainage}
+              onValueChange={onToggleFullDrainage}
+              trackColor={{ false: '#1e293b', true: Colors.cyan }}
+              thumbColor={showFullDrainage ? Colors.gold : '#94a3b8'}
+            />
+          </View>
+        </View>
+      </View>
+
+      {/* SECTION 5: Flood Susceptibility Summary Stats */}
       {summary && (
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <View style={styles.sectionTitleWrap}>
-              <MaterialCommunityIcons name="chart-bar" size={13} color={Colors.gold} />
-              <Text style={styles.sectionTitle}>EVENT SUMMARY INDEX</Text>
-            </View>
-            <View style={styles.fsiPill}>
-              <Text style={styles.fsiPillText}>FSI SCALE 0 - 1</Text>
+              <Ionicons name="stats-chart" size={13} color={Colors.gold} />
+              <Text style={styles.sectionTitle}>
+                FSI SUSCEPTIBILITY METRICS
+              </Text>
             </View>
           </View>
 
           <View style={styles.statsCard}>
-            <View style={styles.statsGrid}>
-              {/* MIN */}
-              <View style={styles.statBox}>
-                <Text style={styles.statLabel}>MIN RISK</Text>
-                <Text style={styles.statValueMin}>{summary.fsi_min.toFixed(2)}</Text>
-                <Text style={styles.statSubLabel}>Baseline</Text>
-              </View>
-
-              <View style={styles.statDivider} />
-
-              {/* MEAN */}
-              <View style={styles.statBox}>
-                <Text style={styles.statLabel}>AVG FSI</Text>
-                <Text style={styles.statValueMean}>{summary.fsi_mean.toFixed(2)}</Text>
-                <Text style={styles.statSubLabel}>Citywide</Text>
-              </View>
-
-              <View style={styles.statDivider} />
-
-              {/* MAX */}
-              <View style={styles.statBox}>
-                <Text style={styles.statLabel}>PEAK FSI</Text>
-                <Text style={styles.statValueMax}>{summary.fsi_max.toFixed(2)}</Text>
-                <Text style={styles.statSubLabel}>Critical</Text>
-              </View>
+            <View style={styles.statBox}>
+              <Text style={styles.statValue}>
+                {(summary.fsi_mean * 100).toFixed(1)}%
+              </Text>
+              <Text style={styles.statLabel}>Average FSI</Text>
+            </View>
+            <View style={styles.statBox}>
+              <Text
+                style={[
+                  styles.statValue,
+                  {
+                    color:
+                      summary.fsi_max > 0.7
+                        ? Colors.capacityRed
+                        : Colors.capacityAmber,
+                  },
+                ]}
+              >
+                {(summary.fsi_max * 100).toFixed(1)}%
+              </Text>
+              <Text style={styles.statLabel}>Peak Risk</Text>
+            </View>
+            <View style={styles.statBox}>
+              <Text style={[styles.statValue, { color: Colors.statusNormal }]}>
+                {(summary.fsi_min * 100).toFixed(1)}%
+              </Text>
+              <Text style={styles.statLabel}>Min Risk</Text>
             </View>
           </View>
         </View>
       )}
 
-      {/* SECTION 4: Download GeoTIFF Action Button */}
-      {intervalReady && (
-        <TouchableOpacity
-          style={styles.downloadBtn}
-          onPress={() => {
-            const url = `${API_BASE}/flood/raster/${encodeURIComponent(event)}${windowQuery(selectedMinutes)}`
-            Linking.openURL(url)
-          }}
-          activeOpacity={0.8}
-        >
-          <View style={styles.downloadIconWrap}>
-            <Ionicons name="download-outline" size={15} color={Colors.goldLight} />
-          </View>
-          <Text style={styles.downloadText}>Download FSI GeoTIFF</Text>
-          <Ionicons name="arrow-forward" size={13} color={Colors.goldLight} style={{ opacity: 0.8 }} />
-        </TouchableOpacity>
-      )}
+      {/* Refresh API Data button */}
+      <TouchableOpacity
+        style={styles.refreshBtn}
+        onPress={onRefresh}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="refresh" size={15} color={Colors.gold} />
+        <Text style={styles.refreshBtnText}>REFRESH DATA PIPELINE</Text>
+      </TouchableOpacity>
     </ScrollView>
   )
 }
@@ -312,22 +490,19 @@ export default function EventsSheet({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'transparent',
   },
   content: {
-    paddingHorizontal: 12,
-    paddingTop: 6,
-    paddingBottom: 28,
-    gap: 14,
+    padding: 16,
+    paddingBottom: 40,
   },
   section: {
-    gap: 7,
+    marginBottom: 20,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 2,
+    alignItems: 'center',
+    marginBottom: 8,
   },
   sectionTitleWrap: {
     flexDirection: 'row',
@@ -335,365 +510,320 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   sectionTitle: {
-    fontFamily: Fonts.monoBold,
-    fontSize: 10,
+    fontFamily: Fonts.mono,
+    fontSize: 11,
+    color: Colors.gold,
+    letterSpacing: 1,
     fontWeight: '700',
-    letterSpacing: 0.8,
-    color: Colors.textSecondary,
-    textTransform: 'uppercase',
   },
   loadingPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: 'rgba(212,175,55,0.1)',
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    backgroundColor: 'rgba(212, 175, 55, 0.12)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
   },
   loadingPillText: {
-    fontFamily: Fonts.monoBold,
-    fontSize: 8.5,
+    fontFamily: Fonts.mono,
+    fontSize: 9,
     color: Colors.gold,
+    fontWeight: '700',
   },
-  dropdownRow: {
+  sourceToggleRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  sourceBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  sourceBtnActive: {
+    backgroundColor: 'rgba(212, 175, 55, 0.15)',
+    borderColor: Colors.gold,
+  },
+  sourceBtnActiveCyan: {
+    backgroundColor: 'rgba(0, 229, 255, 0.15)',
+    borderColor: Colors.cyan,
+  },
+  sourceBtnText: {
+    fontFamily: Fonts.sans,
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  sourceBtnTextActive: {
+    color: Colors.gold,
+  },
+  sourceBtnTextActiveCyan: {
+    color: Colors.cyan,
+  },
+  dropdownRow: {
+    position: 'relative',
+    zIndex: 10,
   },
   dropdownTrigger: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#060710',
-    borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.25)',
+    backgroundColor: 'rgba(15, 23, 42, 0.7)',
     borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
   },
   dropdownTriggerActive: {
     borderColor: Colors.gold,
-    backgroundColor: '#04040a',
-    borderBottomLeftRadius: 4,
-    borderBottomRightRadius: 4,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
   },
   dropdownLeft: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    minWidth: 0,
+    flex: 1,
   },
   calendarIconBox: {
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: 'rgba(212,175,55,0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.25)',
+    backgroundColor: 'rgba(212, 175, 55, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   dropdownTextWrap: {
     flex: 1,
-    minWidth: 0,
   },
   dropdownDateText: {
-    fontFamily: Fonts.monoBold,
-    fontSize: 13,
+    fontFamily: Fonts.mono,
+    fontSize: 14,
+    color: Colors.textPrimary,
     fontWeight: '700',
-    color: Colors.textHeading,
-    letterSpacing: 0.5,
   },
   dropdownSubtext: {
-    fontFamily: Fonts.body,
-    fontSize: 10.5,
+    fontFamily: Fonts.sans,
+    fontSize: 11,
     color: Colors.textSecondary,
-    marginTop: 1,
+    marginTop: 2,
   },
   chevronBox: {
-    paddingLeft: 6,
+    paddingLeft: 8,
   },
-  refreshBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: '#060710',
+  dropdownList: {
+    backgroundColor: '#0a0e1a',
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.25)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  dropdownMenu: {
-    backgroundColor: '#04040a',
-    borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.3)',
-    borderRadius: 10,
-    marginTop: 2,
+    borderTopWidth: 0,
+    borderColor: Colors.gold,
+    borderBottomLeftRadius: 10,
+    borderBottomRightRadius: 10,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    elevation: 8,
   },
   dropdownItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    padding: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
-  },
-  dropdownItemLast: {
-    borderBottomWidth: 0,
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
   },
   dropdownItemActive: {
-    backgroundColor: 'rgba(212,175,55,0.12)',
+    backgroundColor: 'rgba(212, 175, 55, 0.12)',
   },
   dropdownItemLeft: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
-  radioDot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 1.5,
-    borderColor: Colors.textSecondary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radioDotActive: {
-    borderColor: Colors.gold,
-  },
-  radioDotInner: {
+  dateBullet: {
     width: 6,
     height: 6,
     borderRadius: 3,
+    backgroundColor: Colors.textSecondary,
+  },
+  dateBulletActive: {
     backgroundColor: Colors.gold,
   },
-  itemTextWrap: {
-    flex: 1,
+  dropdownItemTitle: {
+    fontFamily: Fonts.mono,
+    fontSize: 13,
+    color: Colors.textPrimary,
+    fontWeight: '600',
   },
-  itemDateText: {
-    fontFamily: Fonts.monoBold,
-    fontSize: 12.5,
+  dropdownItemTitleActive: {
+    color: Colors.gold,
+    fontWeight: '700',
+  },
+  dropdownItemSub: {
+    fontFamily: Fonts.sans,
+    fontSize: 10,
+    color: Colors.textSecondary,
+    marginTop: 1,
+  },
+  windowTimeBasis: {
+    fontFamily: Fonts.mono,
+    fontSize: 10,
+    color: Colors.cyan,
+  },
+  windowPillsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  windowPill: {
+    flex: 1,
+    minWidth: '28%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 229, 255, 0.2)',
+  },
+  windowPillActive: {
+    backgroundColor: 'rgba(0, 229, 255, 0.2)',
+    borderColor: Colors.cyan,
+  },
+  windowPillDisabled: {
+    opacity: 0.3,
+  },
+  windowPillValue: {
+    fontFamily: Fonts.mono,
+    fontSize: 16,
     fontWeight: '700',
     color: Colors.textPrimary,
   },
-  itemDateTextActive: {
-    color: Colors.goldLight,
-  },
-  itemSubText: {
-    fontFamily: Fonts.body,
-    fontSize: 10.5,
-    color: Colors.textSecondary,
-    marginTop: 1,
-  },
-  checkBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: 'rgba(212,175,55,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyContainer: {
-    padding: 16,
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontFamily: Fonts.mono,
-    fontSize: 12,
-    color: Colors.textSecondary,
-  },
-  timeRangePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(0,229,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(0,229,255,0.25)',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 2.5,
-  },
-  timeRangeDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: Colors.cyan,
-  },
-  timeRangeText: {
-    fontFamily: Fonts.monoBold,
-    fontSize: 10,
+  windowPillValueActive: {
     color: Colors.cyan,
-    fontWeight: '700',
   },
-  intervalGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 7,
-  },
-  intervalBtn: {
-    flexBasis: '31.5%',
-    flexGrow: 1,
-    height: 40,
-    borderRadius: 9,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: '#060710',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  intervalBtnActive: {
-    borderColor: Colors.gold,
-    backgroundColor: 'rgba(212,175,55,0.18)',
-    borderWidth: 1.5,
-  },
-  intervalBtnDisabled: {
-    opacity: 0.35,
-  },
-  intervalBtnText: {
-    fontFamily: Fonts.monoBold,
-    fontSize: 11.5,
-    fontWeight: '700',
-    color: Colors.textSecondary,
-    letterSpacing: 0.2,
-  },
-  intervalBtnTextActive: {
-    color: Colors.goldLight,
-    fontWeight: '800',
-  },
-  intervalActiveDot: {
-    position: 'absolute',
-    top: 5,
-    right: 6,
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: Colors.gold,
-  },
-  fsiPill: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 4,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-  },
-  fsiPillText: {
+  windowPillUnit: {
     fontFamily: Fonts.mono,
-    fontSize: 8.5,
-    color: Colors.textSecondary,
-  },
-  statsCard: {
-    borderRadius: 11,
-    borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.2)',
-    backgroundColor: '#060710',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  statBox: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statDivider: {
-    width: 1,
-    height: 32,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  statLabel: {
-    fontFamily: Fonts.monoBold,
     fontSize: 9,
     color: Colors.textSecondary,
-    letterSpacing: 0.6,
-    marginBottom: 2,
-  },
-  statValueMin: {
-    fontFamily: Fonts.monoBold,
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#94a3b8',
-  },
-  statValueMean: {
-    fontFamily: Fonts.monoBold,
-    fontSize: 16,
-    fontWeight: '800',
-    color: Colors.cyan,
-  },
-  statValueMax: {
-    fontFamily: Fonts.monoBold,
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#fbbf24',
-  },
-  statSubLabel: {
-    fontFamily: Fonts.body,
-    fontSize: 9.5,
-    color: 'rgba(155,151,142,0.7)',
     marginTop: 1,
   },
-  downloadBtn: {
+  windowPillUnitActive: {
+    color: Colors.cyan,
+  },
+  drainageCard: {
+    backgroundColor: 'rgba(15, 23, 42, 0.7)',
+    borderRadius: 10,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+  },
+  drainageMetricsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  drainageMetric: {
+    alignItems: 'center',
+  },
+  metricVal: {
+    fontFamily: Fonts.mono,
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.textPrimary,
+  },
+  metricLabel: {
+    fontFamily: Fonts.sans,
+    fontSize: 10,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  metricDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  drainageEmptyText: {
+    fontFamily: Fonts.sans,
+    fontSize: 12,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    paddingVertical: 6,
+  },
+  drainageStatusText: {
+    fontFamily: Fonts.sans,
+    fontSize: 10,
+    color: Colors.statusNormal,
+  },
+  fullDrainageToggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+    paddingTop: 10,
+    marginTop: 6,
+  },
+  toggleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    paddingRight: 10,
+  },
+  toggleText: {
+    fontFamily: Fonts.sans,
+    fontSize: 12,
+    color: Colors.textPrimary,
+  },
+  statsCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(15, 23, 42, 0.7)',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.25)',
+  },
+  statBox: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statValue: {
+    fontFamily: Fonts.mono,
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.gold,
+  },
+  statLabel: {
+    fontFamily: Fonts.sans,
+    fontSize: 10,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  refreshBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    borderRadius: 10,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.35)',
-    backgroundColor: 'rgba(212,175,55,0.08)',
-    paddingVertical: 11,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 2,
+    borderColor: 'rgba(212, 175, 55, 0.4)',
+    marginTop: 10,
   },
-  downloadIconWrap: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    backgroundColor: 'rgba(212,175,55,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  downloadText: {
-    fontFamily: Fonts.monoBold,
-    fontSize: 11.5,
+  refreshBtnText: {
+    fontFamily: Fonts.mono,
+    fontSize: 11,
+    color: Colors.gold,
     fontWeight: '700',
-    color: Colors.goldLight,
-    letterSpacing: 0.4,
+    letterSpacing: 1,
   },
 })

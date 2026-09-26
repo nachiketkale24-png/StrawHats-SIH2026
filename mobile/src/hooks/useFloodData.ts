@@ -1,13 +1,20 @@
 /**
- * Custom hook for managing all flood data state.
- * Ported from the state management logic in MumbaiFloodMap.tsx.
+ * Custom hook for managing all flood and drainage data state in the mobile app.
+ * Complete parity with web frontend state management.
  */
 import { useEffect, useState, useCallback, useRef } from 'react'
-import type { RoutePoint, MapMode } from '../types/flood'
+import type {
+  RoutePoint,
+  MapMode,
+  RainfallSource,
+  RiskTolerance,
+  DrainageResponse,
+} from '../types/flood'
 import {
   getEvents,
   getWindows,
   getSummary,
+  getDrainage,
   getRoutes,
   getPointValue,
 } from '../api/floodApi'
@@ -16,10 +23,12 @@ import type {
   EventWindows,
   RouteComparison,
 } from '../api/floodApi'
+import { addApiBaseListener } from '../api/config'
 
 export function useFloodData() {
   const [events, setEvents] = useState<string[]>([])
   const [event, setEvent] = useState('')
+  const [rainfallSource, setRainfallSource] = useState<RainfallSource>('observed')
   const [windows, setWindows] = useState<EventWindows | null>(null)
   const [minutes, setMinutes] = useState(15)
   const [refresh, setRefresh] = useState(0)
@@ -30,7 +39,18 @@ export function useFloodData() {
   const [points, setPoints] = useState<RoutePoint[]>([])
   const [routes, setRoutes] = useState<RouteComparison | null>(null)
   const [routeStatus, setRouteStatus] = useState('')
+  const [riskTolerance, setRiskTolerance] = useState<RiskTolerance>('low')
 
+  // Drainage Network State
+  const [drainageData, setDrainageData] = useState<DrainageResponse | null>(null)
+  const [drainageStatus, setDrainageStatus] = useState('')
+  const [showFullDrainage, setShowFullDrainage] = useState(false)
+  const [drainageInfo, setDrainageInfo] = useState<{
+    event: string
+    summary: DrainageResponse['summary']
+  } | null>(null)
+
+  const drainageSummary = drainageInfo?.event === event ? drainageInfo.summary : null
   const intervalReady = !!event && windows?.event_date === event
   const selectedMinutes = windows?.windows.length ? minutes : undefined
   const activeWindow = windows?.windows.find((w) => w.minutes === minutes)
@@ -38,7 +58,15 @@ export function useFloodData() {
   const start = points[0]
   const end = points[1]
 
-  // Load events list
+  // Listen to dynamic API base updates from settings
+  useEffect(() => {
+    const unsubscribe = addApiBaseListener(() => {
+      setRefresh((r) => r + 1)
+    })
+    return () => unsubscribe()
+  }, [])
+
+  // 1. Load events list whenever refresh or rainfallSource changes
   useEffect(() => {
     const controller = new AbortController()
     setEventsLoading(true)
@@ -46,7 +74,7 @@ export function useFloodData() {
     setEvent('')
     setSummary(null)
     setRoutes(null)
-    getEvents(controller.signal)
+    getEvents(controller.signal, rainfallSource)
       .then((dates) => {
         setEvents(dates)
         setEvent(dates.at(-1) ?? '')
@@ -55,7 +83,7 @@ export function useFloodData() {
         if (!controller.signal.aborted) {
           setEvents([])
           setApiError(
-            `Cannot load events: ${err.message}. Check that the API server is running.`
+            `Cannot load events: ${err.message}. Check that API server is running on port 8001.`
           )
         }
       })
@@ -63,15 +91,15 @@ export function useFloodData() {
         if (!controller.signal.aborted) setEventsLoading(false)
       })
     return () => controller.abort()
-  }, [refresh])
+  }, [refresh, rainfallSource])
 
-  // Load windows for selected event
+  // 2. Load windows for selected event
   useEffect(() => {
     const controller = new AbortController()
     setWindows(null)
     setMinutes(15)
     if (event) {
-      getWindows(event, controller.signal)
+      getWindows(event, controller.signal, rainfallSource)
         .then((info) => {
           if (!controller.signal.aborted) {
             setWindows(info)
@@ -84,14 +112,14 @@ export function useFloodData() {
         })
     }
     return () => controller.abort()
-  }, [event, refresh])
+  }, [event, refresh, rainfallSource])
 
-  // Load summary for selected event + window
+  // 3. Load summary for selected event + window
   useEffect(() => {
     const controller = new AbortController()
     setSummary(null)
     if (intervalReady) {
-      getSummary(event, controller.signal, selectedMinutes)
+      getSummary(event, controller.signal, selectedMinutes, rainfallSource)
         .then((value) => {
           if (!controller.signal.aborted) setSummary(value)
         })
@@ -101,16 +129,50 @@ export function useFloodData() {
         })
     }
     return () => controller.abort()
-  }, [event, refresh, intervalReady, selectedMinutes])
+  }, [event, refresh, intervalReady, selectedMinutes, rainfallSource])
 
-  // Compute routes when both points are set
+  // 4. Load drainage network data
+  useEffect(() => {
+    const controller = new AbortController()
+    setDrainageStatus('')
+    if (event) {
+      setDrainageStatus('Loading drainage network…')
+      getDrainage(event, controller.signal, showFullDrainage)
+        .then((data) => {
+          if (!controller.signal.aborted) {
+            setDrainageData(data)
+            setDrainageInfo({ event, summary: data.summary })
+            setDrainageStatus('')
+          }
+        })
+        .catch((err) => {
+          if (!controller.signal.aborted) {
+            setDrainageData(null)
+            setDrainageStatus(`Drainage unavailable: ${err.message}`)
+          }
+        })
+    } else {
+      setDrainageData(null)
+    }
+    return () => controller.abort()
+  }, [event, refresh, showFullDrainage])
+
+  // 5. Compute routes when both points are set
   useEffect(() => {
     const controller = new AbortController()
     setRoutes(null)
     setRouteStatus('')
     if (intervalReady && start && end) {
       setRouteStatus('Calculating flood-aware vs shortest route…')
-      getRoutes(event, start, end, controller.signal, selectedMinutes)
+      getRoutes(
+        event,
+        start,
+        end,
+        riskTolerance,
+        controller.signal,
+        selectedMinutes,
+        rainfallSource
+      )
         .then((result) => {
           if (!controller.signal.aborted) {
             setRoutes(result)
@@ -123,7 +185,16 @@ export function useFloodData() {
         })
     }
     return () => controller.abort()
-  }, [event, start, end, refresh, intervalReady, selectedMinutes])
+  }, [
+    event,
+    start,
+    end,
+    riskTolerance,
+    refresh,
+    intervalReady,
+    selectedMinutes,
+    rainfallSource,
+  ])
 
   const handleRefresh = useCallback(() => {
     setRefresh((v) => v + 1)
@@ -143,19 +214,24 @@ export function useFloodData() {
     setRouteStatus('')
   }, [])
 
+  const toggleFullDrainage = useCallback(() => {
+    setShowFullDrainage((prev) => !prev)
+  }, [])
+
   const addPoint = useCallback((point: RoutePoint) => {
     setRoutes(null)
     setRouteStatus('')
-    setPoints((prev) =>
-      prev.length === 1 ? [...prev, point] : [point]
-    )
+    setPoints((prev) => (prev.length === 1 ? [...prev, point] : [point]))
   }, [])
 
-  const setRoutePoints = useCallback((s: RoutePoint, e: RoutePoint) => {
-    setPoints([s, e])
-    setRoutes(null)
-    setRouteStatus('')
-  }, [])
+  const setRoutePoints = useCallback(
+    (startPoint: RoutePoint, endPoint: RoutePoint) => {
+      setRoutes(null)
+      setRouteStatus('')
+      setPoints([startPoint, endPoint])
+    },
+    []
+  )
 
   const clearPoints = useCallback(() => {
     setPoints([])
@@ -165,31 +241,27 @@ export function useFloodData() {
 
   const inspectPoint = useCallback(
     async (lon: number, lat: number) => {
-      if (!intervalReady) return null
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 10000)
+      if (!event) return null
       try {
-        const data = await getPointValue(
+        return await getPointValue(
           event,
           lon,
           lat,
-          controller.signal,
-          selectedMinutes
+          undefined,
+          selectedMinutes,
+          rainfallSource
         )
-        clearTimeout(timeout)
-        return data
       } catch {
-        clearTimeout(timeout)
         return null
       }
     },
-    [event, intervalReady, selectedMinutes]
+    [event, selectedMinutes, rainfallSource]
   )
 
   return {
-    // State
     events,
     event,
+    rainfallSource,
     windows,
     minutes,
     eventsLoading,
@@ -199,15 +271,22 @@ export function useFloodData() {
     points,
     routes,
     routeStatus,
+    riskTolerance,
+    drainageData,
+    drainageStatus,
+    showFullDrainage,
+    drainageSummary,
     intervalReady,
     selectedMinutes,
     activeWindow,
     disabled,
     start,
     end,
-
-    // Actions
     setMode,
+    setRainfallSource,
+    setRiskTolerance,
+    setShowFullDrainage,
+    toggleFullDrainage,
     handleRefresh,
     selectEvent,
     selectMinutes,
@@ -215,6 +294,5 @@ export function useFloodData() {
     setRoutePoints,
     clearPoints,
     inspectPoint,
-    setApiError,
   }
 }
