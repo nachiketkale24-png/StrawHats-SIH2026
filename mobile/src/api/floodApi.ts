@@ -192,11 +192,20 @@ export async function getSummary(
 export async function getDrainage(
   event: string,
   signal?: AbortSignal,
-  full = false
+  full = false,
+  minutes?: number,
+  rainfallSource: RainfallSource = 'observed',
+  summaryOnly = false
 ): Promise<DrainageResponse> {
+  const query = new URLSearchParams()
+  if (full) query.set('full', 'true')
+  if (summaryOnly) query.set('summary_only', 'true')
+  if (minutes !== undefined) query.set('window_minutes', String(minutes))
+  if (rainfallSource === 'nowcast') query.set('rainfall_source', rainfallSource)
+  const suffix = query.toString() ? `?${query.toString()}` : ''
   return (
     await apiRequest(
-      `/drainage/${encodeURIComponent(event)}${full ? '?full=true' : ''}`,
+      `/drainage/${encodeURIComponent(event)}${suffix}`,
       signal
     )
   ).json()

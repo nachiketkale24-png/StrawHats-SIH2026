@@ -36,6 +36,8 @@ interface InteractiveMapProps {
   routes: RouteComparison | null
   drainageData: DrainageResponse | null
   showFullDrainage: boolean
+  showAffectedDrainage: boolean
+  onRasterLoadingChange?: (loading: boolean, minutes?: number) => void
   onMapPress: (coord: { latitude: number; longitude: number }) => void
 }
 
@@ -51,6 +53,8 @@ export function InteractiveMap({
   routes,
   drainageData,
   showFullDrainage,
+  showAffectedDrainage,
+  onRasterLoadingChange,
   onMapPress,
 }: InteractiveMapProps) {
   const webViewRef = useRef<WebView>(null)
@@ -76,8 +80,9 @@ export function InteractiveMap({
       inspectCoord: inspectCoord ? [inspectCoord.lat, inspectCoord.lng] : null,
       normalRoute: normalRouteCoords,
       floodRoute: floodRouteCoords,
-      drainageData: drainageData || null,
+      drainageData: (showAffectedDrainage || showFullDrainage) ? drainageData : null,
       showFullDrainage,
+      showAffectedDrainage,
       timestamp: Date.now(),
     }
     webViewRef.current?.postMessage(
@@ -96,6 +101,7 @@ export function InteractiveMap({
     routes,
     drainageData,
     showFullDrainage,
+    showAffectedDrainage,
   ])
 
   const htmlContent = `
@@ -313,8 +319,12 @@ export function InteractiveMap({
       url += '?' + params.join('&');
 
       try {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'RASTER_LOADING', minutes: minutes }));
         var response = await fetch(url, { cache: 'no-cache' });
-        if (!response.ok) return;
+        if (!response.ok) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'RASTER_ERROR', error: 'Fetch failed' }));
+          return;
+        }
         var arrayBuffer = await response.arrayBuffer();
         var tiff = await geotiffLib.fromArrayBuffer(arrayBuffer);
         var image = await tiff.getImage();
@@ -360,9 +370,11 @@ export function InteractiveMap({
         }).addTo(map);
 
         currentRasterKey = key;
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'RASTER_LOADED', minutes: minutes }));
 
       } catch (err) {
         console.error('Failed to render flood raster:', err);
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'RASTER_ERROR', error: String(err) }));
       }
     }
 
@@ -600,6 +612,10 @@ export function InteractiveMap({
       const data = JSON.parse(e.nativeEvent.data)
       if (data.type === 'MAP_CLICK') {
         onMapPress({ latitude: data.lat, longitude: data.lng })
+      } else if (data.type === 'RASTER_LOADING') {
+        onRasterLoadingChange?.(true, data.minutes)
+      } else if (data.type === 'RASTER_LOADED' || data.type === 'RASTER_ERROR') {
+        onRasterLoadingChange?.(false, data.minutes)
       } else if (data.type === 'MAP_READY') {
         const updateData = {
           apiBase,
@@ -613,8 +629,9 @@ export function InteractiveMap({
           inspectCoord: inspectCoord ? [inspectCoord.lat, inspectCoord.lng] : null,
           normalRoute: normalRouteCoords,
           floodRoute: floodRouteCoords,
-          drainageData: drainageData || null,
+          drainageData: (showAffectedDrainage || showFullDrainage) ? drainageData : null,
           showFullDrainage,
+          showAffectedDrainage,
           timestamp: Date.now(),
         }
         webViewRef.current?.postMessage(

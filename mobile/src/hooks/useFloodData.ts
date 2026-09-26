@@ -2,7 +2,7 @@
  * Custom hook for managing all flood and drainage data state in the mobile app.
  * Complete parity with web frontend state management.
  */
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import type {
   RoutePoint,
   MapMode,
@@ -40,23 +40,51 @@ export function useFloodData() {
   const [routes, setRoutes] = useState<RouteComparison | null>(null)
   const [routeStatus, setRouteStatus] = useState('')
   const [riskTolerance, setRiskTolerance] = useState<RiskTolerance>('low')
+  const [isWindowLoading, setIsWindowLoading] = useState(false)
+  const [rasterLoading, setRasterLoading] = useState(false)
 
   // Drainage Network State
   const [drainageData, setDrainageData] = useState<DrainageResponse | null>(null)
   const [drainageStatus, setDrainageStatus] = useState('')
   const [showFullDrainage, setShowFullDrainage] = useState(false)
+  const [showAffectedDrainage, setShowAffectedDrainage] = useState(false)
   const [drainageInfo, setDrainageInfo] = useState<{
     event: string
+    minutes: number | undefined
+    rainfallSource: RainfallSource
     summary: DrainageResponse['summary']
   } | null>(null)
 
-  const drainageSummary = drainageInfo?.event === event ? drainageInfo.summary : null
   const intervalReady = !!event && windows?.event_date === event
   const selectedMinutes = windows?.windows.length ? minutes : undefined
   const activeWindow = windows?.windows.find((w) => w.minutes === minutes)
-  const disabled = !intervalReady || eventsLoading
+  const isTimeLoading = isWindowLoading || rasterLoading
+  const disabled = !intervalReady || eventsLoading || isTimeLoading
   const start = points[0]
   const end = points[1]
+
+  const drainageSummary =
+    drainageInfo?.event === event &&
+    drainageInfo.minutes === selectedMinutes &&
+    drainageInfo.rainfallSource === rainfallSource
+      ? drainageInfo.summary
+      : null
+
+  const toggleFullDrainage = useCallback((value?: boolean) => {
+    setShowFullDrainage((prev) => {
+      const next = value !== undefined ? value : !prev
+      if (next) setShowAffectedDrainage(false)
+      return next
+    })
+  }, [])
+
+  const toggleAffectedDrainage = useCallback((value?: boolean) => {
+    setShowAffectedDrainage((prev) => {
+      const next = value !== undefined ? value : !prev
+      if (next) setShowFullDrainage(false)
+      return next
+    })
+  }, [])
 
   // Listen to dynamic API base updates from settings
   useEffect(() => {
@@ -119,6 +147,7 @@ export function useFloodData() {
     const controller = new AbortController()
     setSummary(null)
     if (intervalReady) {
+      setIsWindowLoading(true)
       getSummary(event, controller.signal, selectedMinutes, rainfallSource)
         .then((value) => {
           if (!controller.signal.aborted) setSummary(value)
@@ -126,6 +155,9 @@ export function useFloodData() {
         .catch((err) => {
           if (!controller.signal.aborted)
             setApiError(`Cannot load summary: ${err.message}`)
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setIsWindowLoading(false)
         })
     }
     return () => controller.abort()
@@ -135,13 +167,31 @@ export function useFloodData() {
   useEffect(() => {
     const controller = new AbortController()
     setDrainageStatus('')
-    if (event) {
-      setDrainageStatus('Loading drainage network…')
-      getDrainage(event, controller.signal, showFullDrainage)
+    setDrainageInfo(null)
+    if (intervalReady) {
+      setDrainageStatus(
+        showAffectedDrainage || showFullDrainage
+          ? 'Loading drainage network…'
+          : 'Loading drainage counts…'
+      )
+      const summaryOnly = !showAffectedDrainage && !showFullDrainage
+      getDrainage(
+        event,
+        controller.signal,
+        showFullDrainage,
+        selectedMinutes,
+        rainfallSource,
+        summaryOnly
+      )
         .then((data) => {
           if (!controller.signal.aborted) {
             setDrainageData(data)
-            setDrainageInfo({ event, summary: data.summary })
+            setDrainageInfo({
+              event,
+              minutes: selectedMinutes,
+              rainfallSource,
+              summary: data.summary,
+            })
             setDrainageStatus('')
           }
         })
@@ -155,7 +205,15 @@ export function useFloodData() {
       setDrainageData(null)
     }
     return () => controller.abort()
-  }, [event, refresh, showFullDrainage])
+  }, [
+    event,
+    refresh,
+    intervalReady,
+    selectedMinutes,
+    rainfallSource,
+    showFullDrainage,
+    showAffectedDrainage,
+  ])
 
   // 5. Compute routes when both points are set
   useEffect(() => {
@@ -202,6 +260,8 @@ export function useFloodData() {
 
   const selectEvent = useCallback((date: string) => {
     setEvent(date)
+    setIsWindowLoading(true)
+    setRasterLoading(true)
     setRoutes(null)
     setSummary(null)
     setApiError('')
@@ -209,13 +269,18 @@ export function useFloodData() {
 
   const selectMinutes = useCallback((val: number) => {
     setMinutes(val)
+    setIsWindowLoading(true)
+    setRasterLoading(true)
     setRoutes(null)
     setSummary(null)
     setRouteStatus('')
   }, [])
 
-  const toggleFullDrainage = useCallback(() => {
-    setShowFullDrainage((prev) => !prev)
+  const handleRasterLoadingChange = useCallback((loading: boolean) => {
+    setRasterLoading(loading)
+    if (!loading) {
+      setIsWindowLoading(false)
+    }
   }, [])
 
   const addPoint = useCallback((point: RoutePoint) => {
@@ -275,7 +340,11 @@ export function useFloodData() {
     drainageData,
     drainageStatus,
     showFullDrainage,
+    showAffectedDrainage,
     drainageSummary,
+    isWindowLoading,
+    rasterLoading,
+    isTimeLoading,
     intervalReady,
     selectedMinutes,
     activeWindow,
@@ -285,8 +354,12 @@ export function useFloodData() {
     setMode,
     setRainfallSource,
     setRiskTolerance,
+    setIsWindowLoading,
+    handleRasterLoadingChange,
     setShowFullDrainage,
+    setShowAffectedDrainage,
     toggleFullDrainage,
+    toggleAffectedDrainage,
     handleRefresh,
     selectEvent,
     selectMinutes,

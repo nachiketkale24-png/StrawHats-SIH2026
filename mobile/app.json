@@ -15,6 +15,7 @@
       "supportsTablet": true
     },
     "android": {
+      "usesCleartextTraffic": true,
       "backgroundColor": "#04040a",
       "adaptiveIcon": {
         "backgroundColor": "#04040a",

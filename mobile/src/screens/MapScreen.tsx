@@ -17,6 +17,7 @@ import {
   Dimensions,
   Alert,
   PanResponder,
+  ActivityIndicator,
 } from 'react-native'
 import * as Location from 'expo-location'
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
@@ -38,7 +39,7 @@ import { Colors, Fonts } from '../theme'
 import type { RoutePoint } from '../types/flood'
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window')
-const SHEET_HEIGHT = Math.min(SCREEN_HEIGHT * 0.62, 520)
+const SHEET_HEIGHT = Math.min(SCREEN_HEIGHT * 0.72, 580)
 
 export default function MapScreen() {
   const insets = useSafeAreaInsets()
@@ -62,6 +63,7 @@ export default function MapScreen() {
     drainageData,
     drainageStatus,
     showFullDrainage,
+    showAffectedDrainage,
     drainageSummary,
     intervalReady,
     selectedMinutes,
@@ -69,10 +71,15 @@ export default function MapScreen() {
     disabled,
     start,
     end,
+    isWindowLoading,
+    rasterLoading,
+    isTimeLoading,
+    handleRasterLoadingChange,
     setMode,
     setRainfallSource,
     setRiskTolerance,
     toggleFullDrainage,
+    toggleAffectedDrainage,
     handleRefresh,
     selectEvent,
     selectMinutes,
@@ -233,18 +240,34 @@ export default function MapScreen() {
           routes={routes}
           drainageData={drainageData}
           showFullDrainage={showFullDrainage}
+          showAffectedDrainage={showAffectedDrainage}
+          onRasterLoadingChange={handleRasterLoadingChange}
           onMapPress={handleMapPress}
         />
 
+        {/* Floating Time Simulation Loading HUD */}
+        {isTimeLoading && !eventsLoading && (
+          <View style={styles.timeLoadingHud} pointerEvents="none">
+            <View style={styles.timeLoadingPill}>
+              <ActivityIndicator size="small" color={Colors.cyan} />
+              <Text style={styles.timeLoadingText}>
+                Loading {selectedMinutes ?? minutes}m simulation map…
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* Floating Top Mode Guide Pill */}
-        <ModeGuide
-          mode={mode}
-          pointCount={points.length}
-          onClearMode={() => {
-            setMode('inspect')
-            clearPoints()
-          }}
-        />
+        {!eventsLoading && !apiError && !routeStatus && !isTimeLoading && (
+          <ModeGuide
+            mode={mode}
+            pointCount={points.length}
+            onClearMode={() => {
+              setMode('inspect')
+              clearPoints()
+            }}
+          />
+        )}
 
         {/* Floating Map Action Controls (Right side) */}
         <View style={styles.mapControls}>
@@ -336,6 +359,8 @@ export default function MapScreen() {
                 drainageSummary={drainageSummary}
                 drainageStatus={drainageStatus}
                 showFullDrainage={showFullDrainage}
+                showAffectedDrainage={showAffectedDrainage}
+                isWindowLoading={isTimeLoading}
                 intervalReady={intervalReady}
                 selectedMinutes={selectedMinutes}
                 disabled={disabled}
@@ -343,6 +368,7 @@ export default function MapScreen() {
                 onSelectRainfallSource={setRainfallSource}
                 onSelectMinutes={selectMinutes}
                 onToggleFullDrainage={toggleFullDrainage}
+                onToggleAffectedDrainage={toggleAffectedDrainage}
                 onRefresh={handleRefresh}
               />
             )}
@@ -492,5 +518,36 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bgVoid,
     paddingBottom: 2,
     zIndex: 50,
+  },
+  timeLoadingHud: {
+    position: 'absolute',
+    top: 14,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 35,
+  },
+  timeLoadingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(10, 14, 26, 0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 229, 255, 0.4)',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    shadowColor: '#00e5ff',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  timeLoadingText: {
+    fontFamily: Fonts.mono,
+    fontSize: 11,
+    color: Colors.cyan,
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
 })
