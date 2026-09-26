@@ -12,6 +12,7 @@ from pipeline.drainage_network import couple_rainfall_to_drainage, compute_surch
 from pipeline.fsi_model import integrate_flood_risk, save_raster
 from backend.services.flood_service import FloodService
 from pipeline.road_risk_attribution import attach_flood_risk
+from pipeline.road_segmentation import VERSION
 from shapely.geometry import LineString
 
 
@@ -68,12 +69,13 @@ class DrainageDurationTests(unittest.TestCase):
     def test_cached_road_masks_match_zonal_maxima_across_windows(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'risk.tif'
-            graph = nx.Graph()
-            for index, points in enumerate(([(0, 100), (100, 0)],
+            # Isolate sampling-cache parity on an already segmented road graph.
+            graph = nx.Graph(crs='EPSG:4326', road_segmentation_version=VERSION)
+            for points in (([(0, 100), (100, 0)],
                                             [(20, 50), (80, 50)],
                                             [(-100, -100), (-50, -50)])):
-                graph.add_edge(index * 2, index * 2 + 1,
-                               geometry=LineString([(x / 1000, y / 1000) for x, y in points]), length_m=100.)
+                coordinates = [(x / 1000, y / 1000) for x, y in points]
+                graph.add_edge(coordinates[0], coordinates[-1], geometry=LineString(coordinates), length_m=100.)
             cache = {}
             valid = np.ones((10, 10), dtype=bool)
             valid[:2, :2] = False

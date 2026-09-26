@@ -6,6 +6,8 @@ const icon = (children: ReactNode) => ({ size = 18, ...props }: IconProps) => (
 )
 export const Plus = icon(<><path d="M12 5v14"/><path d="M5 12h14"/></>)
 export const Minus = icon(<path d="M5 12h14"/>)
+export const Moon = icon(<path d="M20 14a8 8 0 0 1-10-10 8 8 0 1 0 10 10Z" />)
+export const Sun = icon(<><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5" /></>)
 export const ChevronUp = icon(<path d="m18 15-6-6-6 6"/>)
 export const ChevronDown = icon(<path d="m6 9 6 6 6-6"/>)
 export const ChevronLeft = icon(<path d="m15 18-6-6 6-6"/>)

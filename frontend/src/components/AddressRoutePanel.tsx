@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useId } from 'react'
 import { ArrowUpDown, Loader2, MapPin, Navigation, Sparkles, X } from './icons'
 import { geocodeAddress, geocodeSuggest } from '../lib/floodApi'
 import type { GeocodeResult } from '../lib/floodApi'
@@ -42,6 +42,7 @@ function useSuggestions(query: string, setSuggestions: (s: GeocodeResult[]) => v
 }
 
 export default function AddressRoutePanel({ onRouteFound, onClear, disabled, routeStatus, hasRoute }: Props) {
+  const fieldId = useId()
   const [startQuery, setStartQuery] = useState('')
   const [endQuery, setEndQuery] = useState('')
   const [startSuggestions, setStartSuggestions] = useState<GeocodeResult[]>([])
@@ -85,8 +86,11 @@ export default function AddressRoutePanel({ onRouteFound, onClear, disabled, rou
         return
       }
       
-      setStartQuery(startRes.displayName.split(',')[0] || startRes.displayName)
-      setEndQuery(endRes.displayName.split(',')[0] || endRes.displayName)
+      // Preserve coordinate pairs so a second submission uses the same location.
+      const displayQuery = (result: GeocodeResult) => /^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$/.test(result.displayName)
+        ? result.displayName : result.displayName.split(',')[0] || result.displayName
+      setStartQuery(displayQuery(startRes))
+      setEndQuery(displayQuery(endRes))
       
       onRouteFound(
         { lat: startRes.lat, lng: startRes.lng },
@@ -168,9 +172,11 @@ export default function AddressRoutePanel({ onRouteFound, onClear, disabled, rou
       <form onSubmit={handleSubmit} className="flex flex-col gap-2.5">
         {/* Start point */}
         <div className="relative">
+          <label htmlFor={`${fieldId}-from`} className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">From</label>
           <div className="flex items-center rounded-lg border border-[var(--border-secondary)] bg-[var(--bg-primary)] px-2.5 focus-within:border-[var(--gold-primary)]">
             <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-[10px] font-bold text-emerald-400">A</span>
             <input
+              id={`${fieldId}-from`}
               type="text"
               className="w-full bg-transparent px-2.5 py-2 text-xs md:text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none"
               placeholder="Origin / Start location"
@@ -221,9 +227,11 @@ export default function AddressRoutePanel({ onRouteFound, onClear, disabled, rou
 
         {/* Destination point */}
         <div className="relative">
+          <label htmlFor={`${fieldId}-to`} className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">To</label>
           <div className="flex items-center rounded-lg border border-[var(--border-secondary)] bg-[var(--bg-primary)] px-2.5 focus-within:border-[var(--gold-primary)]">
             <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-[10px] font-bold text-cyan-400">B</span>
             <input
+              id={`${fieldId}-to`}
               type="text"
               className="w-full bg-transparent px-2.5 py-2 text-xs md:text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none"
               placeholder="Destination in Mumbai"

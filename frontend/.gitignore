@@ -11,6 +11,13 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+.env.*
+!.env.example
+
+# Local browser verification screenshots
+google-preview-*.png
+google-dashboard-*.png
 
 # Editor directories and files
 .vscode/*

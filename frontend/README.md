@@ -1,13 +1,20 @@
 # Mumbai Flood Susceptibility Frontend
 
-React, TypeScript and MapLibre frontend connected to `../mumbai-flood-prototype`.
+React, TypeScript and Google Maps frontend connected to `../mumbai-flood-prototype`.
+
+The dashboard uses Google's standard roadmap with the existing flood raster,
+drainage GeoJSON, point inspection, start/destination markers and FastAPI route
+paths. Panels use a light-card theme. The isolated base-map preview remains at
+`?map=preview`. Set `VITE_GOOGLE_MAPS_API_KEY` in `.env` or `.env.local` and restart
+Vite. See [the migration plan](GOOGLE_MAPS_MIGRATION.md) for architecture, setup,
+verification and implementation status.
 
 ## Run locally
 
 Start the prototype API in a separate terminal, from its project directory:
 
 ```powershell
-cd C:\Dev\strawhats_backend\mumbai-flood-prototype
+cd C:\Dev\StrawHats-SIH2026\mumbai-flood-prototype
 .\.venv\Scripts\python.exe -m uvicorn backend.main:app --reload --port 8001
 ```
 
@@ -20,7 +27,7 @@ Run the offline pipeline at least once if no event outputs exist:
 Then start this frontend:
 
 ```powershell
-cd C:\Dev\strawhats_backend\frontend
+cd C:\Dev\StrawHats-SIH2026\frontend
 npm install
 npm run dev
 ```
@@ -34,12 +41,15 @@ Use the prototype backend above; the separate older `../backend` application has
 2. Check the event's FSI minimum, mean and maximum and the colored raster overlay.
 3. In Inspect mode, click the map to fetch the FSI at that location.
 4. Choose Pick route, then click a start and destination inside Mumbai road coverage.
-   The API snaps coordinates to its real road graph. Cyan shows the flood-aware path;
-   gray shows the shortest path. The panel compares distances and maximum/average FSI.
+   The API snaps coordinates to its real road graph. Blue shows the risk-tolerance path;
+   slate shows the shortest path. An amber dashed line is a suggested higher-risk route. The panel compares distances and maximum/average FSI.
 5. Download FSI raster retrieves the original event GeoTIFF.
+6. Map layers controls Flood Risk, Road Risk, Traffic and Satellite. Road Risk
+   shows actual precomputed graph risks from zoom 14. Traffic shows current
+   Google traffic where available and never changes flood-aware routing.
 
 The frontend calls `GET /flood/events`, `GET /flood/summary/{event_date}`,
-`GET /flood/raster/{event_date}`, `GET /flood/point/{event_date}`, `GET /flood/windows/{event_date}`, `GET /drainage/{event_date}`, and `POST /route`. The selected `window_minutes` is sent with flood, drainage, and routing requests.
+`GET /flood/raster/{event_date}`, `GET /flood/point/{event_date}`, `GET /flood/windows/{event_date}`, `GET /flood/roads/{event_date}`, `GET /drainage/{event_date}`, and `POST /route`. The selected `window_minutes` and rainfall source are sent with flood, drainage, road-risk and routing requests.
 Event changes and new selections cancel stale requests. API failures and missing outputs
 are displayed without substituting synthetic results.
 
@@ -65,8 +75,15 @@ Production hosting must either proxy `/api` to the Python backend or set this UR
 Vite's development proxy does not apply to `npm run preview` or static hosting.
 The API must permit the frontend origin through CORS.
 
-Map tiles and 3D buildings require internet access. Satellite and 3D controls retain
-the existing map behavior. The offline Python calculations are unchanged.
+Google Maps tiles require internet access and a restricted browser API key.
+Satellite switches to Google hybrid imagery without replacing the map instance.
+3D buildings are dropped. The offline Python calculations are unchanged.
+Existing address search uses Nominatim. Google Places activation remains optional.
+The removed Mumbai municipal crop stays removed; the map uses the original extent.
+Local env files are ignored and untracked. Google Cloud restrictions must be
+checked in the Cloud console: restrict the browser key to your website referrers
+and required APIs ([Google setup guidance](https://developers.google.com/maps/documentation/javascript/get-api-key)).
+Cloud settings cannot be audited from this checkout.
 
 
 Historical dates available after preprocessing: 2015-06-19, 2017-08-29 and
@@ -80,7 +97,9 @@ Integration checks (run from frontend with the prototype API and Vite running):
 ```sh
 node --experimental-strip-types scripts/check-raster-projection.mjs
 node scripts/check-event-intervals.mjs
-node scripts/verify-drainage-windows.cjs
+node scripts/verify-google-dashboard.cjs
+node scripts/verify-google-preview.cjs
+node scripts/check-map-security.cjs
 ```
 
 The first check compares every display pixel with Rasterio/GDAL EPSG:3857 output

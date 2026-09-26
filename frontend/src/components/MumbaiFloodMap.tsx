@@ -1,10 +1,18 @@
-import { useEffect, useRef, useState } from 'react'
-import { Popup } from 'maplibre-gl'
-import type { Map, MapMouseEvent } from 'maplibre-gl'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { APIProvider } from '@vis.gl/react-google-maps'
+import FloodMapCanvas from './map/FloodMapCanvas'
+import FloodRiskLayer from './map/FloodRiskLayer'
+import RoadRiskLayer from './map/RoadRiskLayer'
+import TrafficLayer from './map/TrafficLayer'
+import LayerControls from './map/LayerControls'
+import MapCard from './map/MapCard'
+import RouteComparisonPanel from './RouteComparison'
+import type { FloodRasterImage } from './map/FloodRiskLayer'
+import RouteLayer from './map/RouteLayer'
+import { useMapInspection } from '../hooks/useMapInspection'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   AlertCircle,
-  Box,
   Calendar,
   Clock,
   Crosshair,
@@ -20,16 +28,15 @@ import {
   ShieldCheck,
   X
 } from './icons'
-import MapControls from './MapControls'
-import { useMumbaiMap } from '../hooks/useMumbaiMap'
+import { useGoogleMumbaiMap } from '../hooks/useGoogleMumbaiMap'
 import Panel, { PanelCaption, PanelLabel } from './ui/Panel'
 import AddressRoutePanel from './AddressRoutePanel'
 import { RiskToleranceSelector } from './RoutePanel'
 import type { RiskTolerance } from './RoutePanel'
-import { API_BASE, apiRequest, getDrainage, getEvents, getRoutes, getSummary, getWindows, windowQuery } from '../lib/floodApi'
+import { API_BASE, getDrainage, getEvents, getRoutes, getSummary, getWindows, windowQuery } from '../lib/floodApi'
 import type { DrainageResponse, EventSummary, RainfallSource, RouteComparison, EventWindows } from '../lib/floodApi'
-import { clearCoverageOverlay, clearEventRaster, FSI_COLORS, loadEventRaster, updateEventRoutes } from '../lib/eventLayers'
-import { clearDrainageLayers, updateDrainageLayers } from '../lib/drainageLayers'
+import { FSI_COLORS, loadEventRaster } from '../lib/floodRaster'
+import { clearDrainageLayers, updateDrainageLayers } from '../lib/googleDrainage'
 import { clearDisplayCache } from '../lib/displayCache'
 import type { MapMode, RoutePoint } from '../types/flood'
 
@@ -77,21 +84,37 @@ function DrainageNetworkControl({ summary, full, affected, onToggle, onAffectedT
       <label className="mt-2 flex cursor-pointer items-start gap-2 text-[var(--text-primary)]">
         <input type="checkbox" className="mt-0.5 accent-[var(--gold-primary)]" checked={full}
           disabled={!summary} onChange={event => onToggle(event.target.checked)} />
-        <span>Show full drainage network (34k+ points)</span>
+        <span>Show full drainage network (zoom in for details)</span>
       </label>
+      {full && <p className="mt-1.5">Zoom in for normal manholes; conduits appear at close zoom.</p>}
     </div>
   )
 }
 
+const libraries = ['places', 'visualization']
+
 export default function MumbaiFloodMap() {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<Map | null>(null)
+  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim()
+  const [loadError, setLoadError] = useState<string | null>(null)
+  if (!apiKey) return <div role="alert" className="m-4 rounded-xl bg-white p-4 text-slate-800">Set VITE_GOOGLE_MAPS_API_KEY in frontend/.env.local and restart Vite.</div>
+  return <APIProvider apiKey={apiKey} libraries={libraries} onError={() => setLoadError('Google Maps could not load. Check your connection and API key configuration.')}>
+    <MumbaiFloodDashboard loadError={loadError} />
+  </APIProvider>
+}
+
+function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
+  const mapRef = useRef<google.maps.Map | null>(null)
   const [ready, setReady] = useState(false)
   const [satellite, setSatellite] = useState(() => {
     try { return localStorage.getItem('mumbai-satellite') === 'true' } catch { return false }
   })
-  const [threeD, setThreeD] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [mapTimeout, setMapTimeout] = useState(false)
+  const error = loadError || (mapTimeout ? 'Google Maps is taking longer than expected. Check your connection and API configuration.' : null)
+  const [floodImage, setFloodImage] = useState<FloodRasterImage | null>(null)
+  const [showFloodRisk, setShowFloodRisk] = useState(true)
+  const [showRoadRisk, setShowRoadRisk] = useState(false)
+  const [showTraffic, setShowTraffic] = useState(false)
+  const [roadRiskStatus, setRoadRiskStatus] = useState('')
   const [events, setEvents] = useState<string[]>([])
   const [rainfallSource, setRainfallSource] = useState<RainfallSource>('observed')
   const [event, setEvent] = useState('')
@@ -134,7 +157,12 @@ export default function MumbaiFloodMap() {
   const [mobileTab, setMobileTab] = useState<MobileTab>(null)
   const [desktopHudVisible, setDesktopHudVisible] = useState(true)
 
-  useMumbaiMap(containerRef, mapRef, setReady, setError)
+  useGoogleMumbaiMap(mapRef, setReady)
+  useEffect(() => {
+    if (ready) { setMapTimeout(false); return }
+    const timeout = window.setTimeout(() => setMapTimeout(true), 30000)
+    return () => window.clearTimeout(timeout)
+  }, [ready])
 
   useEffect(() => { clearDisplayCache() }, [refresh])
 
@@ -170,14 +198,12 @@ export default function MumbaiFloodMap() {
     const map = mapRef.current
     if (!ready || !map) return
     const controller = new AbortController()
-    clearCoverageOverlay(map)
-    if (!intervalReady) { clearEventRaster(map); setRasterStatus(''); return }
+    setFloodImage(null)
+    if (!intervalReady) { setRasterStatus(''); return }
     setRasterStatus('Loading flood susceptibility map…')
     loadEventRaster(event, controller.signal, selectedMinutes, rainfallSource).then(image => {
       if (controller.signal.aborted) return
-      clearEventRaster(map)
-      map.addSource('event-fsi', { type: 'image', ...image })
-      map.addLayer({ id: 'event-fsi', type: 'raster', source: 'event-fsi', paint: { 'raster-fade-duration': 0, 'raster-resampling': 'nearest' } }, 'mumbai-buildings-3d')
+      setFloodImage(image)
       setRasterStatus('')
       // Warm only the next window once the selected map is visible.
       const next = windows?.windows.find(window => window.minutes > (selectedMinutes ?? 0))
@@ -203,7 +229,7 @@ export default function MumbaiFloodMap() {
       getDrainage(event, controller.signal, showFullDrainage, selectedMinutes, rainfallSource,
         !showAffectedDrainage && !showFullDrainage).then(data => {
         if (!controller.signal.aborted) {
-          if (showAffectedDrainage || showFullDrainage) updateDrainageLayers(map, data, showFullDrainage)
+          if (showAffectedDrainage || showFullDrainage) updateDrainageLayers(map, data)
           setDrainageInfo({ event, minutes: selectedMinutes, rainfallSource, summary: data.summary })
           setDrainageStatus('')
         }
@@ -227,100 +253,12 @@ export default function MumbaiFloodMap() {
     return () => controller.abort()
   }, [event, start, end, riskTolerance, refresh, intervalReady, selectedMinutes, rainfallSource])
 
-  useEffect(() => {
-    if (ready && mapRef.current) updateEventRoutes(mapRef.current, points, routes)
-  }, [ready, points, routes])
-
-  useEffect(() => {
-    const map = mapRef.current
-    if (!ready || !map || !intervalReady) return
-    let popup: Popup | null = null
-    let request: AbortController | null = null
-    map.getCanvas().style.cursor = mode === 'route' ? 'crosshair' : ''
-    
-    const click = (e: MapMouseEvent) => {
-      request?.abort(); popup?.remove()
-      if (mode === 'route') {
-        setRoutes(null); setRouteStatus('')
-        setPoints(previous => previous.length === 1 ? [...previous, { lng: e.lngLat.lng, lat: e.lngLat.lat }] : [{ lng: e.lngLat.lng, lat: e.lngLat.lat }])
-        return
-      }
-      const hits = map.queryRenderedFeatures(e.point, { layers: [
-        'drainage-nodes', 'drainage-nodes-normal', 'drainage-edges', 'drainage-edges-normal', 'drainage-arrows',
-      ] })
-      const drainageFeature = hits.find(hit => hit.layer.id === 'drainage-nodes' || hit.layer.id === 'drainage-nodes-normal')
-        ?? hits.find(hit => hit.layer.id === 'drainage-edges' || hit.layer.id === 'drainage-edges-normal' || hit.layer.id === 'drainage-arrows')
-      if (drainageFeature) {
-        const props = drainageFeature.properties
-        const flow = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(3)} m³/s` : 'Unknown'
-        const ratio = typeof props.surcharge_ratio === 'number' && Number.isFinite(props.surcharge_ratio)
-          ? props.surcharge_ratio.toFixed(2) : 'Unknown'
-        const content = document.createElement('div')
-        content.className = 'inspection-content'
-        if (drainageFeature.layer.id === 'drainage-nodes' || drainageFeature.layer.id === 'drainage-nodes-normal') {
-          const elevation = typeof props.ground_elev === 'number' && Number.isFinite(props.ground_elev)
-            ? `${props.ground_elev.toFixed(2)} m` : 'Unknown'
-          content.textContent = `Manhole ${props.id}\nStatus: ${props.status}\nGround elevation: ${elevation}\nIncoming Q: ${flow(props.q_in_m3s)}\nConduit capacity: ${flow(props.capacity_m3s)}\nSurcharge ratio: ${ratio}`
-        } else {
-          const status = props.surcharged ? 'Surcharged'
-            : typeof props.surcharge_ratio === 'number' && props.surcharge_ratio > 1
-              ? 'Export flag: not surcharged (ratio exceeds 1)'
-              : 'Within capacity'
-          content.textContent = `Drainage flow\n${props.fromNodeId} → ${props.toNodeId}\nIncoming Q: ${flow(props.q_in_m3s)}\nCapacity: ${flow(props.capacity_m3s)}\nSurcharge ratio: ${ratio}\n${status}`
-        }
-        popup = new Popup({ closeButton: true, maxWidth: '280px' }).setLngLat(e.lngLat).setDOMContent(content).addTo(map)
-        return
-      }
-      const controller = new AbortController()
-      request = controller
-      const content = document.createElement('div')
-      content.className = 'inspection-content'; content.textContent = 'Loading FSI…'
-      popup = new Popup({ closeButton: true, maxWidth: '280px' }).setLngLat(e.lngLat).setDOMContent(content).addTo(map)
-      const query = new URLSearchParams({ lon: String(e.lngLat.lng), lat: String(e.lngLat.lat) })
-      if (selectedMinutes !== undefined) query.set('window_minutes', String(selectedMinutes))
-      query.set('rainfall_source', rainfallSource)
-      apiRequest(`/flood/point/${encodeURIComponent(event)}?${query}`, controller.signal)
-        .then(response => response.json()).then(data => {
-          if (!controller.signal.aborted) {
-            const windowLabel = activeWindow ? ` · ${activeWindow.start_time.slice(11,16)}–${activeWindow.end_time.slice(11,16)}` : ' · Daily'
-            const fsiLabel = typeof data.fsi === 'number' && Number.isFinite(data.fsi) ? `FSI: ${data.fsi.toFixed(3)} (0–1)` : 'No flood data at this location.'
-            const coverageLabel = data.in_station_network === false ? '\n⚠️ Lower confidence (extrapolated)' : data.in_station_network === true ? '\n✓ Station Network Coverage' : ''
-            content.textContent = `📍 ${event}${windowLabel}\n${fsiLabel}${coverageLabel}`
-          }
-        }).catch(err => { if (!controller.signal.aborted) content.textContent = `Unable to inspect: ${err.message}` })
-    }
-    map.on('click', click)
-    return () => { request?.abort(); popup?.remove(); map.off('click', click); map.getCanvas().style.cursor = '' }
-  }, [ready, mode, event, intervalReady, selectedMinutes, activeWindow, rainfallSource])
-
+  const clearRoutes = useCallback(() => { setRoutes(null); setRouteStatus('') }, [])
+  useMapInspection({ mapRef, ready, mode, event, intervalReady, selectedMinutes, activeWindow, rainfallSource, setPoints, clearRoutes })
   useEffect(() => {
     try { localStorage.setItem('mumbai-satellite', String(satellite)) } catch { /* Storage may be disabled. */ }
-    const map = mapRef.current
-    if (!ready || !map || !map.getLayer('satellite-imagery')) return
-    map.setLayoutProperty('satellite-imagery', 'visibility', satellite ? 'visible' : 'none')
-  }, [satellite, ready])
-  
-  useEffect(() => {
-    const map = mapRef.current
-    if (!ready || !map || !map.isStyleLoaded() || !map.getLayer('mumbai-buildings-3d')) return
-    map.setLayoutProperty('mumbai-buildings-3d', 'visibility', threeD ? 'visible' : 'none')
-    map.easeTo({ pitch: threeD ? 55 : 0, bearing: threeD ? -15 : 0, ...(threeD ? { zoom: Math.max(map.getZoom(), 14.5) } : {}), duration: 700 })
-  }, [threeD, ready])
+  }, [satellite])
 
-  const locateUser = () => {
-    if (!navigator.geolocation || !mapRef.current) return
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        mapRef.current?.easeTo({
-          center: [pos.coords.longitude, pos.coords.latitude],
-          zoom: 14,
-          duration: 900
-        })
-      },
-      () => {},
-      { enableHighAccuracy: true, timeout: 8000 }
-    )
-  }
 
   const disabled = !ready || !intervalReady || eventsLoading
   const buttonClass = 'hud-button flex flex-1 items-center justify-center gap-1.5 px-3 py-2.5 text-xs'
@@ -328,7 +266,20 @@ export default function MumbaiFloodMap() {
   return (
     <section className="relative h-full w-full bg-[var(--bg-secondary)] overflow-hidden" aria-label="Mumbai flood susceptibility map">
       {/* Map Canvas */}
-      <div ref={containerRef} className="absolute inset-0 h-full w-full" />
+      <div className="absolute inset-0 h-full w-full">
+        <FloodMapCanvas satellite={satellite} onSatelliteChange={setSatellite} />
+        <FloodRiskLayer image={floodImage} visible={showFloodRisk} />
+        <RoadRiskLayer visible={showRoadRisk && intervalReady} event={event} minutes={selectedMinutes} rainfallSource={rainfallSource} refresh={refresh} onStatus={setRoadRiskStatus} />
+        <TrafficLayer visible={showTraffic} />
+        <RouteLayer points={points} routes={routes} />
+      </div>
+      <div className="absolute bottom-20 left-4 z-20 lg:bottom-auto lg:top-4 lg:left-1/2 lg:-translate-x-1/2">
+        <MapCard title="Map layers" hidden={!desktopHudVisible}>
+        <LayerControls flood={showFloodRisk} roads={showRoadRisk} traffic={showTraffic} satellite={satellite}
+          ready={ready} roadStatus={roadRiskStatus} onFlood={setShowFloodRisk} onRoads={setShowRoadRisk}
+          onTraffic={setShowTraffic} onSatellite={setSatellite} />
+        </MapCard>
+      </div>
 
       {routes?.suggested_route && !routes.tolerance_route && dismissedSuggestion !== routes && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -365,15 +316,15 @@ export default function MumbaiFloodMap() {
       )}
 
       {/* Mobile Top Floating Mode Guide */}
-      <div className="pointer-events-none absolute inset-x-3 top-3 z-20 flex justify-center md:hidden">
+      <div className="pointer-events-none absolute inset-x-3 top-3 z-20 flex justify-center lg:hidden">
         {mode === 'inspect' && (
-          <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-[var(--border-secondary)] bg-[var(--bg-panel)]/90 px-3.5 py-1.5 text-[11px] text-[var(--text-secondary)] shadow-lg backdrop-blur-md">
+          <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-[var(--border-secondary)] bg-[var(--bg-panel)] px-3.5 py-1.5 text-[11px] text-[var(--text-secondary)] shadow-lg backdrop-blur-md">
             <Crosshair size={13} className="text-[var(--cyan-primary)]" />
             <span>Tap map anywhere to inspect FSI</span>
           </div>
         )}
         {mode === 'route' && (
-          <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-[var(--border-secondary)] bg-[var(--bg-panel)]/90 px-3.5 py-1.5 text-[11px] text-[var(--gold-light)] shadow-lg backdrop-blur-md">
+          <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-[var(--border-secondary)] bg-[var(--bg-panel)] px-3.5 py-1.5 text-[11px] text-[var(--gold-light)] shadow-lg backdrop-blur-md">
             <MapPin size={13} className="text-[var(--cyan-primary)]" />
             <span>{!start ? 'Tap point A (Start)' : !end ? 'Tap point B (Destination)' : 'Route plotted'}</span>
             {start && (
@@ -390,7 +341,7 @@ export default function MumbaiFloodMap() {
       </div>
 
       {/* Floating View Toggles (Mobile Quick Buttons) */}
-      <div className="pointer-events-none absolute right-3 top-12 z-20 flex flex-col gap-2 md:hidden">
+      <div className="pointer-events-none absolute right-3 top-12 z-20 flex flex-col gap-2 lg:hidden">
         <button
           disabled={!ready}
           aria-pressed={satellite}
@@ -400,19 +351,10 @@ export default function MumbaiFloodMap() {
         >
           <Satellite size={16} className={satellite ? 'text-[var(--gold-primary)]' : 'text-[var(--text-secondary)]'} />
         </button>
-        <button
-          disabled={!ready}
-          aria-pressed={threeD}
-          aria-label="Toggle 3D Buildings"
-          className="pointer-events-auto hud-button flex h-9 w-9 items-center justify-center rounded-lg shadow-lg"
-          onClick={() => setThreeD(v => !v)}
-        >
-          <Box size={16} className={threeD ? 'text-[var(--gold-primary)]' : 'text-[var(--text-secondary)]'} />
-        </button>
       </div>
 
       {/* DESKTOP HUD FLOATING PANELS */}
-      <div className="pointer-events-none absolute inset-x-4 top-4 z-10 hidden max-h-[calc(100%_-_8rem)] items-start justify-between gap-4 overflow-y-auto md:flex">
+      <div className="pointer-events-none absolute inset-x-4 top-4 z-10 hidden max-h-[calc(100%_-_8rem)] items-start justify-between gap-4 overflow-y-auto lg:flex">
         {/* Left Desktop Panel */}
         <AnimatePresence>
           {desktopHudVisible && (
@@ -422,7 +364,7 @@ export default function MumbaiFloodMap() {
               exit={{ opacity: 0, x: -20 }}
               className="pointer-events-auto flex w-72 flex-col gap-3"
             >
-              <Panel>
+              <MapCard title="Rainfall"><Panel>
                 <div className="flex items-center justify-between">
                   <PanelLabel className="flex items-center gap-1.5">
                     <Calendar size={13} className="text-[var(--gold-light)]" />
@@ -455,7 +397,7 @@ export default function MumbaiFloodMap() {
 
                 <select
                   aria-label="Rainfall event selection"
-                  className="mt-2.5 w-full rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] px-3 py-2 text-xs md:text-sm font-medium text-[var(--text-primary)] focus:outline-none focus:border-[var(--gold-primary)]"
+                  className="mt-2.5 w-full rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] px-3 py-2 text-xs lg:text-sm font-medium text-[var(--text-primary)] focus:outline-none focus:border-[var(--gold-primary)]"
                   value={event}
                   disabled={eventsLoading || !events.length}
                   onChange={e => { setEvent(e.target.value); setRoutes(null); setSummary(null); setApiError('') }}
@@ -465,7 +407,7 @@ export default function MumbaiFloodMap() {
                 </select>
 
                 {summary && (
-                  <div className="mt-3 rounded-lg border border-[var(--border-secondary)] bg-[var(--bg-primary)]/60 p-2.5 font-[family-name:var(--font-hud)]">
+                  <div className="mt-3 rounded-lg border border-[var(--border-secondary)] bg-[var(--bg-primary)] p-2.5 font-[family-name:var(--font-hud)]">
                     <div className="flex justify-between text-[11px] text-[var(--text-secondary)]">
                       <span>MIN: <b className="text-[var(--text-primary)]">{summary.fsi_min.toFixed(2)}</b></span>
                       <span>MEAN: <b className="text-[var(--cyan-primary)]">{summary.fsi_mean.toFixed(2)}</b></span>
@@ -484,10 +426,10 @@ export default function MumbaiFloodMap() {
                     Download GeoTIFF Raster
                   </a>
                 )}
-              </Panel>
+              </Panel></MapCard>
 
               {/* FSI Scale Legend */}
-              <Panel>
+              <MapCard title="Flood susceptibility"><Panel>
                 <PanelLabel className="flex items-center gap-1.5">
                   <ShieldCheck size={13} className="text-[var(--cyan-primary)]" />
                   Flood Susceptibility Index
@@ -516,7 +458,7 @@ export default function MumbaiFloodMap() {
                   Overlay fades at data limits. Areas beyond coverage are unassessed.
                 </p>
                 <DrainageNetworkControl summary={drainageSummary} full={showFullDrainage} affected={showAffectedDrainage} onToggle={toggleFullDrainage} onAffectedToggle={toggleAffectedDrainage} />
-              </Panel>
+              </Panel></MapCard>
             </motion.div>
           )}
         </AnimatePresence>
@@ -542,20 +484,10 @@ export default function MumbaiFloodMap() {
                   <Satellite size={14} />
                   Satellite
                 </button>
-                <button
-                  disabled={!ready}
-                  aria-pressed={threeD}
-                  aria-label="3D buildings"
-                  className={buttonClass}
-                  onClick={() => setThreeD(v => !v)}
-                >
-                  <Box size={14} />
-                  3D Buildings
-                </button>
               </div>
 
               {/* Mode & Routing Panel */}
-              <Panel>
+              <MapCard title="Navigation and routes"><Panel>
                 <PanelLabel className="flex items-center gap-1.5">
                   <Navigation2 size={13} className="text-[var(--cyan-primary)]" />
                   Navigation & Analysis
@@ -627,39 +559,7 @@ export default function MumbaiFloodMap() {
 
                 {/* Route Comparison Output */}
                 {routes && <div className="mt-3 space-y-2" aria-live="polite">
-                  <div className="space-y-2 rounded-xl border border-[var(--cyan-primary)]/30 bg-[var(--bg-primary)]/80 p-3 text-xs shadow-lg">
-                    <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-1.5">
-                      <span className="font-semibold text-[var(--text-secondary)]">Fastest</span>
-                      <span className="font-[family-name:var(--font-hud)] font-bold text-[var(--text-primary)]">
-                        {routes.normal_distance_km.toFixed(2)} km
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-[var(--cyan-primary)] flex items-center gap-1">
-                        <ShieldCheck size={14} />
-                        {riskTolerance[0].toUpperCase() + riskTolerance.slice(1)}-risk route
-                      </span>
-                      <span className="font-[family-name:var(--font-hud)] font-bold text-[var(--text-primary)]">
-                        {routes.tolerance_distance_km === null ? 'No qualifying route' : `${routes.tolerance_distance_km.toFixed(2)} km`}
-                      </span>
-                    </div>
-
-                    <div className="rounded bg-[var(--bg-secondary)] p-2 font-[family-name:var(--font-hud)] text-[11px] text-[var(--text-secondary)] space-y-1">
-                      <div className="flex justify-between">
-                        <span>Tolerance Route Max Risk:</span>
-                        <span className="text-emerald-400 font-bold">{routes.max_risk_on_route?.toFixed(3) ?? '—'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Fastest Route Avg Risk:</span>
-                        <span className="text-amber-400 font-bold">{routes.normal_route.avg_risk.toFixed(3)}</span>
-                      </div>
-                      <div className="flex justify-between border-t border-[var(--border-secondary)] pt-1 text-[10px]">
-                        <span>Distance difference:</span>
-                        <span className="text-[var(--gold-light)]">{routes.tolerance_distance_km === null ? '—' : `+${(routes.tolerance_distance_km - routes.normal_distance_km).toFixed(2)} km`}</span>
-                      </div>
-                    </div>
-                  </div>
+                  <RouteComparisonPanel routes={routes} tolerance={riskTolerance} />
                   {routes.warning && <Panel className="border-[color:var(--warning-color)]/70 bg-[color:var(--warning-color)]/15 p-3">
                     <div className="flex gap-2">
                       <AlertCircle size={16} className="mt-0.5 shrink-0 text-[var(--warning-color)]" />
@@ -668,7 +568,7 @@ export default function MumbaiFloodMap() {
                     <RouteSuggestion route={routes.suggested_route} onAccept={setRiskTolerance} />
                   </Panel>}
                 </div>}
-              </Panel>
+              </Panel></MapCard>
             </motion.div>
           )}
         </AnimatePresence>
@@ -677,16 +577,18 @@ export default function MumbaiFloodMap() {
       {/* Desktop HUD Panel Toggle */}
       <button
         type="button"
-        title={desktopHudVisible ? 'Minimize HUD Panels' : 'Show HUD Panels'}
-        aria-label="Toggle HUD panels"
-        className="pointer-events-auto absolute left-4 top-4 z-20 hidden md:flex hud-button h-8 w-8 items-center justify-center rounded-lg shadow-lg"
-        onClick={() => setDesktopHudVisible(v => !v)}
+        title={desktopHudVisible ? 'Hide all cards' : 'Show all cards'}
+        aria-label={desktopHudVisible ? 'Hide all cards' : 'Show all cards'}
+        className="pointer-events-auto absolute left-4 bottom-20 z-40 flex hud-button items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs shadow-lg"
+        onClick={() => { if (desktopHudVisible) setMobileTab(null); setDesktopHudVisible(v => !v) }}
       >
         {desktopHudVisible ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+        {desktopHudVisible ? 'Hide all cards' : 'Show all cards'}
       </button>
 
       {/* DESKTOP TIMELINE DOCK (Bottom center) */}
-      <section aria-label="FSI time interval" className="pointer-events-none absolute bottom-5 left-1/2 z-10 hidden w-[min(92%,36rem)] -translate-x-1/2 md:block">
+      <section aria-label="FSI time interval" className="pointer-events-none absolute bottom-5 left-1/2 z-10 hidden w-[min(92%,36rem)] -translate-x-1/2 lg:block">
+        <MapCard title="Rainfall time window" hidden={!desktopHudVisible} className="pointer-events-auto">
         <div className="pointer-events-auto hud-panel p-3">
           <div className="mb-2 flex items-center justify-between">
             <PanelLabel className="flex items-center gap-1.5">
@@ -714,10 +616,11 @@ export default function MumbaiFloodMap() {
             ))}
           </div>
         </div>
+        </MapCard>
       </section>
 
       {/* MOBILE BOTTOM NAVIGATION DOCK (4 Tabs) */}
-      <nav aria-label="Mobile Navigation" className="absolute bottom-0 inset-x-0 z-30 flex md:hidden items-center justify-around border-t border-[var(--border-primary)] bg-[var(--bg-sheet)] px-2 py-2 backdrop-blur-xl pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      <nav aria-label="Mobile Navigation" className="absolute bottom-0 inset-x-0 z-30 flex lg:hidden items-center justify-around border-t border-[var(--border-primary)] bg-[var(--bg-sheet)] px-2 py-2 backdrop-blur-xl pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         <button
           type="button"
           aria-pressed={mobileTab === 'events'}
@@ -774,7 +677,7 @@ export default function MumbaiFloodMap() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="absolute inset-0 z-30 bg-black/50 backdrop-blur-sm md:hidden"
+              className="absolute inset-0 z-30 bg-black/50 backdrop-blur-sm lg:hidden"
               onClick={() => setMobileTab(null)}
             />
 
@@ -784,7 +687,7 @@ export default function MumbaiFloodMap() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 26, stiffness: 280 }}
-              className="absolute bottom-[56px] inset-x-0 z-40 max-h-[75vh] overflow-hidden rounded-t-2xl border-t border-[var(--border-primary)] bg-[var(--bg-sheet)] p-4 shadow-2xl backdrop-blur-2xl md:hidden flex flex-col"
+              className="absolute bottom-[56px] inset-x-0 z-40 max-h-[75vh] overflow-hidden rounded-t-2xl border-t border-[var(--border-primary)] bg-[var(--bg-sheet)] p-4 shadow-2xl backdrop-blur-2xl lg:hidden flex flex-col"
             >
               {/* Drag handle / Header */}
               <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-2.5">
@@ -799,7 +702,7 @@ export default function MumbaiFloodMap() {
                 <button
                   type="button"
                   aria-label="Close sheet"
-                  className="rounded-full p-1 text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-white"
+                  className="rounded-full p-1 text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)]"
                   onClick={() => setMobileTab(null)}
                 >
                   <X size={16} />
@@ -927,6 +830,7 @@ export default function MumbaiFloodMap() {
                       </button>
                     </div>
 
+                    {mode === 'route-address' ? (
                     <AddressRoutePanel
                       onRouteFound={(s, e) => { setPoints([s, e]); setRoutes(null); setRouteStatus('') }}
                       onClear={() => { setPoints([]); setRoutes(null); setRouteStatus('') }}
@@ -934,48 +838,16 @@ export default function MumbaiFloodMap() {
                       routeStatus={routeStatus}
                       hasRoute={!!routes}
                     />
+                    ) : <div className="space-y-2 text-xs text-[var(--text-secondary)]">
+                      <p>{!start ? 'Pick your start point on the map.' : !end ? 'Pick your destination on the map.' : 'Start and destination are selected on the map.'}</p>
+                      {points.map((point, index) => <p key={index}>{index === 0 ? 'From' : 'To'}: {point.lat.toFixed(4)}, {point.lng.toFixed(4)}</p>)}
+                    </div>}
 
                     <RiskToleranceSelector value={riskTolerance} onChange={setRiskTolerance} disabled={disabled} />
 
                     {/* Route Results Card on Mobile */}
                     {routes && <div className="space-y-2" aria-live="polite">
-                      <div className="rounded-xl border border-[var(--cyan-primary)]/40 bg-[var(--bg-primary)] p-3 text-xs space-y-2">
-                        <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-2">
-                          <span className="font-semibold text-[var(--text-secondary)]">Fastest</span>
-                          <span className="font-[family-name:var(--font-hud)] text-sm font-bold text-white">
-                            {routes.normal_distance_km.toFixed(2)} km
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                          <span className="font-semibold text-[var(--cyan-primary)] flex items-center gap-1.5">
-                            <ShieldCheck size={16} />
-                            {riskTolerance[0].toUpperCase() + riskTolerance.slice(1)}-risk route
-                          </span>
-                          <span className="font-[family-name:var(--font-hud)] text-sm font-bold text-white">
-                            {routes.tolerance_distance_km === null ? 'No qualifying route' : `${routes.tolerance_distance_km.toFixed(2)} km`}
-                          </span>
-                        </div>
-
-                        <div className="rounded-lg bg-[var(--bg-secondary)] p-2.5 font-[family-name:var(--font-hud)] text-[11px] text-[var(--text-secondary)] space-y-1">
-                          <div className="flex justify-between">
-                            <span>Tolerance Route Max Risk:</span>
-                            <span className="text-emerald-400 font-bold">{routes.max_risk_on_route?.toFixed(3) ?? '—'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Fastest Route Risk:</span>
-                            <span className="text-amber-400 font-bold">{routes.normal_route.avg_risk.toFixed(3)}</span>
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          className="hud-button mt-2 h-9 w-full text-xs font-semibold text-[var(--cyan-primary)]"
-                          onClick={() => setMobileTab(null)}
-                        >
-                          View Route on Map
-                        </button>
-                      </div>
+                      <RouteComparisonPanel routes={routes} tolerance={riskTolerance} onView={() => setMobileTab(null)} />
                       {routes.warning && <Panel className="border-[color:var(--warning-color)]/70 bg-[color:var(--warning-color)]/15 p-3">
                         <div className="flex gap-2">
                           <AlertCircle size={16} className="mt-0.5 shrink-0 text-[var(--warning-color)]" />
@@ -1000,15 +872,6 @@ export default function MumbaiFloodMap() {
                       >
                         <Satellite size={15} />
                         Satellite Imagery
-                      </button>
-                      <button
-                        disabled={!ready}
-                        aria-pressed={threeD}
-                        className="hud-button flex h-10 flex-1 items-center justify-center gap-2 text-xs"
-                        onClick={() => setThreeD(v => !v)}
-                      >
-                        <Box size={15} />
-                        3D Extrusions
                       </button>
                     </div>
 
@@ -1049,7 +912,6 @@ export default function MumbaiFloodMap() {
       </AnimatePresence>
 
       {/* Map Pan & Zoom Controls */}
-      <MapControls mapRef={mapRef} onLocateUser={locateUser} />
     </section>
   )
 }
