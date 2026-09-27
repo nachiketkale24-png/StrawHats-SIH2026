@@ -1,3 +1,4 @@
+import { useTheme } from '../theme/ThemeProvider'
 /**
  * Floating status toast matching the web's loading/error banner.
  */
@@ -22,6 +23,8 @@ export default function StatusToast({
   message,
   isError,
 }: Props) {
+  const { colors: Colors } = useTheme()
+  const styles = makeStyles(Colors)
   const displayError = error || (isError ? message : null)
   const displayLoading = loading || (routeStatus && !error)
   const displayMsg = displayError || routeStatus || message
@@ -46,7 +49,7 @@ export default function StatusToast({
   )
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet.create({
   wrapper: {
     position: 'absolute',
     top: 10,

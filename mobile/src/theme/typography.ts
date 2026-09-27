@@ -9,22 +9,15 @@ const monoFont = Platform.select({
   default: 'monospace',
 })
 
-const systemFont = Platform.select({
-  ios: 'System',
-  android: 'Roboto',
-  default: 'sans-serif',
-})
-
 export const Fonts = {
   hud: 'JetBrainsMono',
   hudBold: 'JetBrainsMono-Bold',
   mono: monoFont,
   monoBold: monoFont,
-  sans: systemFont,
-  body: systemFont,
-  bodyMedium: systemFont,
-  bodySemiBold: systemFont,
-  bodyBold: systemFont,
+  body: Platform.select({ ios: 'System', android: 'Roboto', default: 'sans-serif' }),
+  bodyMedium: Platform.select({ ios: 'System', android: 'Roboto', default: 'sans-serif' }),
+  bodySemiBold: Platform.select({ ios: 'System', android: 'Roboto', default: 'sans-serif' }),
+  bodyBold: Platform.select({ ios: 'System', android: 'Roboto', default: 'sans-serif' }),
 } as const
 
 export const FontSizes = {

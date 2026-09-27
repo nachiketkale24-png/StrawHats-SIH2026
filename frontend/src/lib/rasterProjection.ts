@@ -1,4 +1,4 @@
-// MapLibre image textures are linear in Web Mercator, not in latitude.
+// Map image textures are linear in Web Mercator, not in latitude.
 // Sample each target pixel center back into the source geographic raster.
 export type RasterBounds = [number, number, number, number]
 

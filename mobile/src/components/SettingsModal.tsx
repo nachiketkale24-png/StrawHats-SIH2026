@@ -1,3 +1,4 @@
+import { useTheme } from '../theme/ThemeProvider'
 /**
  * Backend Connection Settings Modal.
  * Allows configuring the FastAPI server IP/URL and testing connection from Expo Go.
@@ -20,11 +21,12 @@ import { Colors, Fonts } from '../theme'
 interface SettingsModalProps {
   visible: boolean
   onClose: () => void
-  onSaved?: () => void
-  onSuccess?: () => void
+  onSuccess: () => void
 }
 
-export function SettingsModal({ visible, onClose, onSaved, onSuccess }: SettingsModalProps) {
+export function SettingsModal({ visible, onClose, onSuccess }: SettingsModalProps) {
+  const { colors: Colors } = useTheme()
+  const styles = makeStyles(Colors)
   const [url, setUrl] = useState(getApiBase())
   const [testing, setTesting] = useState(false)
   const [status, setStatus] = useState<{ type: 'idle' | 'success' | 'error'; message: string }>({
@@ -53,8 +55,7 @@ export function SettingsModal({ visible, onClose, onSaved, onSuccess }: Settings
         message: `Connected successfully! Found ${events.length} event(s).`,
       })
       setTimeout(() => {
-        onSaved?.()
-        onSuccess?.()
+        onSuccess()
         onClose()
       }, 1000)
     } catch (err: any) {
@@ -82,7 +83,7 @@ export function SettingsModal({ visible, onClose, onSaved, onSuccess }: Settings
           <View style={styles.header}>
             <View style={styles.titleRow}>
               <Ionicons name="server" size={18} color={Colors.gold} />
-              <Text style={styles.title}>BACKEND SERVER SETTINGS</Text>
+              <Text style={styles.title}>Backend server settings</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={18} color={Colors.textSecondary} />
@@ -90,29 +91,8 @@ export function SettingsModal({ visible, onClose, onSaved, onSuccess }: Settings
           </View>
 
           <Text style={styles.desc}>
-            Specify your FastAPI backend host address. For Expo Go on your phone, use your computer's Wi-Fi LAN IP on port 8001.
+            Specify your FastAPI backend host address. If running locally with Expo Go, use your computer's local Wi-Fi IP (e.g. http://192.168.1.15:8000).
           </Text>
-
-          {/* Quick Connect Buttons */}
-          <View style={{ flexDirection: 'row', gap: 6, marginBottom: 12 }}>
-            <TouchableOpacity
-              style={[styles.quickLanBtn, { flex: 1, marginBottom: 0 }]}
-              onPress={() => setUrl('http://10.65.25.109:8001')}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="phone-portrait-outline" size={13} color={Colors.cyan} />
-              <Text style={styles.quickLanText}>Wi-Fi Device</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.quickLanBtn, { flex: 1, marginBottom: 0 }]}
-              onPress={() => setUrl('http://10.0.2.2:8001')}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="laptop-outline" size={13} color={Colors.gold} />
-              <Text style={[styles.quickLanText, { color: Colors.gold }]}>Emulator</Text>
-            </TouchableOpacity>
-          </View>
 
           {/* Input */}
           <View style={styles.inputWrap}>
@@ -120,7 +100,7 @@ export function SettingsModal({ visible, onClose, onSaved, onSuccess }: Settings
               style={styles.input}
               value={url}
               onChangeText={setUrl}
-              placeholder="http://10.65.25.109:8001"
+              placeholder="http://192.168.x.x:8000"
               placeholderTextColor={Colors.textSecondary}
               autoCapitalize="none"
               autoCorrect={false}
@@ -176,7 +156,7 @@ export function SettingsModal({ visible, onClose, onSaved, onSuccess }: Settings
   )
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.8)',
@@ -210,10 +190,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   title: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 13,
     color: Colors.gold,
-    letterSpacing: 0.5,
+    letterSpacing: 0,
   },
   closeBtn: {
     padding: 4,
@@ -223,25 +203,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textSecondary,
     lineHeight: 18,
-    marginBottom: 10,
-  },
-  quickLanBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(0, 229, 255, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 229, 255, 0.35)',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    marginBottom: 12,
-  },
-  quickLanText: {
-    fontFamily: Fonts.mono,
-    fontSize: 11,
-    color: Colors.cyan,
-    fontWeight: '600',
+    marginBottom: 14,
   },
   inputWrap: {
     backgroundColor: Colors.bgSecondary,
@@ -313,7 +275,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   saveBtnText: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 12,
     color: '#000',
     fontWeight: '700',

@@ -45,40 +45,16 @@ class DrainageService:
             raise FileNotFoundError(f"Nowcast drainage requires a time window for event {event_id}")
         prefix = "nowcast_" if source is RainfallSource.NOWCAST else ""
         key = event_id if window_minutes is None else f"{prefix}{event_id}_{window_minutes}min"
-        
-        # 1. Check exact key (e.g. 2020-09-23_180min)
         manholes_path = config.drainage_manholes_gpkg(key)
         drains_path = config.drainage_status_gpkg(key)
-        cache_key = key
-
-        # 2. Fall back to event date base file (e.g. 2020-09-23)
-        if not Path(manholes_path).exists() or not Path(drains_path).exists():
-            base_manholes = config.drainage_manholes_gpkg(event_id)
-            base_drains = config.drainage_status_gpkg(event_id)
-            if Path(base_manholes).exists() and Path(base_drains).exists():
-                manholes_path = base_manholes
-                drains_path = base_drains
-                cache_key = f"{event_id}_fallback"
-
-        # 3. Fall back to any available reference event (e.g. 2020-09-23)
-        if not Path(manholes_path).exists() or not Path(drains_path).exists():
-            for ref_date in ["2020-09-23", "2023-07-26", "2017-08-29", "2019-09-04", "2020-08-04"]:
-                ref_m = config.drainage_manholes_gpkg(ref_date)
-                ref_d = config.drainage_status_gpkg(ref_date)
-                if Path(ref_m).exists() and Path(ref_d).exists():
-                    manholes_path = ref_m
-                    drains_path = ref_d
-                    cache_key = f"{ref_date}_ref"
-                    break
-
         if not Path(manholes_path).exists() or not Path(drains_path).exists():
             window_label = "daily" if window_minutes is None else f"{window_minutes}-minute"
             raise FileNotFoundError(f"No {source.value} {window_label} drainage status files found for event {event_id}")
 
         mtimes = (manholes_path.stat().st_mtime_ns, drains_path.stat().st_mtime_ns)
-        cached = self._cache.get(cache_key)
+        cached = self._cache.get(key)
         if summary_only:
-            cached_summary = self._summary_cache.get(cache_key)
+            cached_summary = self._summary_cache.get(key)
             if cached and cached[0] == mtimes:
                 summary = cached[1]['summary']
             elif cached_summary and cached_summary[0] == mtimes:
@@ -92,7 +68,7 @@ class DrainageService:
                         ).fetchone())
                 summary = dict(total_manholes=counts[0][0], surcharged_manholes=counts[0][1],
                                total_conduits=counts[1][0], surcharged_conduits=counts[1][1])
-                self._summary_cache[cache_key] = (mtimes, summary)
+                self._summary_cache[key] = (mtimes, summary)
             return {'summary': summary,
                     'manholes': {'type': 'FeatureCollection', 'features': []},
                     'conduits': {'type': 'FeatureCollection', 'features': []}}
@@ -159,7 +135,7 @@ class DrainageService:
             ]},
             "summary": summary,
         }
-        self._cache[cache_key] = (mtimes, response, filtered)
+        self._cache[key] = (mtimes, response, filtered)
         return response if full else filtered
 
 

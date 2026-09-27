@@ -1,46 +1,41 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PointerEvent, RefObject } from 'react'
-import type * as maplibregl from 'maplibre-gl'
 import { motion, useReducedMotion } from 'framer-motion'
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Compass, Locate, Minus, Plus } from './icons'
+import MapCard from './map/MapCard'
 
 type Action = 'in' | 'out' | 'north' | 'east' | 'south' | 'west'
 type Props = {
-  mapRef: RefObject<maplibregl.Map | null>
+  mapRef: RefObject<google.maps.Map | null>
   onLocateUser?: () => void
+  visible?: boolean
 }
 
-export default function MapControls({ mapRef, onLocateUser }: Props) {
+export default function MapControls({ mapRef, onLocateUser, visible = true }: Props) {
   const [pressed, setPressed] = useState<Action | null>(null)
   const active = useRef<{ action: Action; pointerId: number; holding: boolean } | null>(null)
   const delay = useRef<ReturnType<typeof setTimeout>>()
   const repeat = useRef<ReturnType<typeof setInterval>>()
   const reduceMotion = useReducedMotion()
 
-  function step(action: Action, duration: number) {
+  function step(action: Action, _duration: number) {
     const map = mapRef.current
     if (!map) return
     if (action === 'in' || action === 'out') {
-      map.easeTo({ zoom: map.getZoom() + (action === 'in' ? 1 : -1), duration })
+      map.setZoom((map.getZoom() ?? 11) + (action === 'in' ? 1 : -1))
     } else {
       const offsets: Record<'north' | 'east' | 'south' | 'west', [number, number]> = {
         north: [0, -220], east: [220, 0], south: [0, 220], west: [-220, 0],
       }
-      map.panBy(offsets[action], { duration })
+      map.panBy(...offsets[action])
     }
   }
 
   function resetView() {
     const map = mapRef.current
     if (!map) return
-    const isMobile = window.innerWidth < 768
-    map.easeTo({
-      center: [72.8777, 19.076],
-      zoom: isMobile ? 10.3 : 11.2,
-      pitch: 0,
-      bearing: 0,
-      duration: 800,
-    })
+    const isMobile = window.innerWidth < 1024
+    map.setOptions({ center: { lng: 72.8777, lat: 19.076 }, zoom: isMobile ? 10 : 11 })
   }
 
   function finish(event: PointerEvent<HTMLButtonElement>, cancelled = false) {
@@ -50,8 +45,7 @@ export default function MapControls({ mapRef, onLocateUser }: Props) {
     clearInterval(repeat.current)
     active.current = null
     setPressed(null)
-    if (current.holding) mapRef.current?.stop()
-    else if (!cancelled) step(current.action, 240)
+    if (!current.holding && !cancelled) step(current.action, 240)
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
@@ -61,7 +55,6 @@ export default function MapControls({ mapRef, onLocateUser }: Props) {
     const stop = () => {
       clearTimeout(delay.current)
       clearInterval(repeat.current)
-      if (active.current?.holding) mapRef.current?.stop()
       active.current = null
       setPressed(null)
     }
@@ -74,7 +67,7 @@ export default function MapControls({ mapRef, onLocateUser }: Props) {
       <button
         type="button" aria-label={label} title={label}
         data-pressed={pressed === action}
-        className="hud-button flex h-9 w-9 md:h-10 md:w-10 touch-none select-none items-center justify-center"
+        className="hud-button flex h-9 w-9 lg:h-10 lg:w-10 touch-none select-none items-center justify-center"
         onPointerDown={(event) => {
           if (event.button !== 0 || active.current) return
           event.currentTarget.setPointerCapture(event.pointerId)
@@ -98,10 +91,11 @@ export default function MapControls({ mapRef, onLocateUser }: Props) {
   return (
     <>
       {/* Mobile Floating Action Controls */}
+      <MapCard title="Map controls" hidden={!visible} className="absolute bottom-20 right-3 z-20 w-max lg:hidden">
       <motion.div
         role="group" aria-label="Mobile map controls"
         initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-        className="hud-panel absolute bottom-20 right-3 z-10 flex flex-col gap-1.5 p-1.5 md:hidden"
+        className="hud-panel flex flex-col gap-1.5 p-1.5"
       >
         <button
           type="button"
@@ -142,12 +136,14 @@ export default function MapControls({ mapRef, onLocateUser }: Props) {
           </button>
         )}
       </motion.div>
+      </MapCard>
 
       {/* Desktop HUD Controls with Compass */}
+      <MapCard title="Map controls" hidden={!visible} className="absolute bottom-12 right-4 z-20 hidden w-max lg:block">
       <motion.div
         role="group" aria-label="Map pan and zoom controls"
         initial={{ opacity: 0, y: reduceMotion ? 0 : 12 }} animate={{ opacity: 1, y: 0 }}
-        className="hud-panel absolute bottom-12 right-4 z-10 hidden items-center gap-2 p-3 md:flex"
+        className="hud-panel flex items-center gap-2 p-3"
       >
         <div className="flex flex-col gap-1">
           {button('in', 'Zoom in', Plus)}
@@ -168,6 +164,7 @@ export default function MapControls({ mapRef, onLocateUser }: Props) {
           <span />{button('south', 'Pan south', ChevronDown)}<span />
         </div>
       </motion.div>
+      </MapCard>
     </>
   )
 }

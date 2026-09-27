@@ -1,16 +1,11 @@
 /**
- * Flood API client for the Mobile App.
- * Parity with web frontend lib/floodApi.ts + backend FastAPI routers.
+ * Flood API client — direct port of the web frontend's lib/floodApi.ts.
+ * Includes enhanced Mumbai landmark auto-suggestions and Nominatim geocoding.
  */
 import { getApiBase } from './config'
-import type {
-  RoutePoint,
-  RainfallSource,
-  RiskTolerance,
-  DrainageResponse,
-} from '../types/flood'
-
-export type { DrainageResponse }
+import type { RoutePoint } from '../types/flood'
+export type RainfallSource = 'observed' | 'nowcast'
+export type RiskTolerance = 'low' | 'medium' | 'high' | 'severe'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -37,29 +32,41 @@ export interface ApiRoute {
   length_m: number
   max_risk: number
   avg_risk: number
-  coordinates: [number, number][] // [[lon, lat], ...]
-}
-
-export interface ApiRouteLine {
-  type: 'LineString'
-  coordinates: [number, number][] // [[lon, lat], ...]
+  coordinates: [number, number][]
 }
 
 export interface RouteComparison {
   event_date: string
   normal_route: ApiRoute
-  normal_distance_km: number
-  flood_aware_route?: ApiRoute
-  flood_aware_distance_km?: number
-  tolerance_route?: ApiRouteLine
-  tolerance_distance_km?: number
-  extra_distance_m: number
-  extra_distance_pct: number
-  detour_pct?: number
-  risk_tolerance?: RiskTolerance
-  max_risk_on_route: number
+  tolerance_route: { type: 'LineString'; coordinates: [number, number][] } | null
+  tolerance_distance_km: number | null
+  max_risk_on_route: number | null
   high_severe_segment_count: number
-  warning?: string | null
+  warning: string | null
+  suggested_route: (ApiRoute & { risk_tolerance: RiskTolerance }) | null
+}
+export interface DrainageResponse {
+  summary: { total_manholes: number; surcharged_manholes: number; total_conduits: number; surcharged_conduits: number }
+  manholes: { type: 'FeatureCollection'; features: { geometry: { coordinates: [number, number] }; properties: { id: string; surcharged: boolean; surcharge_ratio: number | null } }[] }
+  conduits: { type: 'FeatureCollection'; features: { geometry: { coordinates: [number, number][] }; properties: { id: string; surcharged: boolean; surcharge_ratio: number | null } }[] }
+}
+const drainageCache = new Map<string, { data: DrainageResponse; expires: number }>()
+export function clearMobileCache() { drainageCache.clear() }
+export async function getDrainage(event: string, signal: AbortSignal, minutes?: number,
+  source: RainfallSource = 'observed', mode: 'summary' | 'affected' | 'full' = 'summary'): Promise<DrainageResponse> {
+  const query = new URLSearchParams(windowQuery(minutes, source).slice(1))
+  if (mode === 'summary') query.set('summary_only', 'true')
+  if (mode === 'full') query.set('full', 'true')
+  const path = `/drainage/${encodeURIComponent(event)}?${query}`
+  const key = getApiBase() + path
+  const cached = drainageCache.get(key)
+  if (cached && cached.expires > Date.now()) return cached.data
+  const data: DrainageResponse = await (await apiRequest(path, signal)).json()
+  if (!signal.aborted) {
+    drainageCache.set(key, { data, expires: Date.now() + 300000 })
+    while (drainageCache.size > 18) drainageCache.delete(drainageCache.keys().next().value!)
+  }
+  return data
 }
 
 export interface GeocodeResult {
@@ -109,12 +116,11 @@ const MUMBAI_LANDMARKS: GeocodeResult[] = [
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-export function windowQuery(minutes?: number, rainfallSource?: RainfallSource): string {
+export function windowQuery(minutes?: number, source: RainfallSource = 'observed'): string {
   const query = new URLSearchParams()
   if (minutes !== undefined) query.set('window_minutes', String(minutes))
-  if (rainfallSource) query.set('rainfall_source', rainfallSource)
-  const encoded = query.toString()
-  return encoded ? `?${encoded}` : ''
+  if (source === 'nowcast') query.set('rainfall_source', source)
+  return query.toString() ? `?${query}` : ''
 }
 
 export async function apiRequest(
@@ -146,13 +152,8 @@ export async function apiRequest(
 
 // ─── API Functions ───────────────────────────────────────────────────────────
 
-export async function getEvents(
-  signal?: AbortSignal,
-  rainfallSource: RainfallSource = 'observed'
-): Promise<string[]> {
-  const events = await (
-    await apiRequest(`/flood/events${windowQuery(undefined, rainfallSource)}`, signal)
-  ).json()
+export async function getEvents(signal?: AbortSignal, source: RainfallSource = 'observed'): Promise<string[]> {
+  const events = await (await apiRequest('/flood/events' + windowQuery(undefined, source), signal)).json()
   if (
     !Array.isArray(events) ||
     !events.every((event: unknown) => typeof event === 'string')
@@ -165,11 +166,11 @@ export async function getEvents(
 export async function getWindows(
   event: string,
   signal?: AbortSignal,
-  rainfallSource: RainfallSource = 'observed'
+  source: RainfallSource = 'observed'
 ): Promise<EventWindows> {
   return (
     await apiRequest(
-      `/flood/windows/${encodeURIComponent(event)}${windowQuery(undefined, rainfallSource)}`,
+      `/flood/windows/${encodeURIComponent(event)}${windowQuery(undefined, source)}`,
       signal
     )
   ).json()
@@ -179,33 +180,11 @@ export async function getSummary(
   event: string,
   signal?: AbortSignal,
   minutes?: number,
-  rainfallSource: RainfallSource = 'observed'
+  source: RainfallSource = 'observed'
 ): Promise<EventSummary> {
   return (
     await apiRequest(
-      `/flood/summary/${encodeURIComponent(event)}${windowQuery(minutes, rainfallSource)}`,
-      signal
-    )
-  ).json()
-}
-
-export async function getDrainage(
-  event: string,
-  signal?: AbortSignal,
-  full = false,
-  minutes?: number,
-  rainfallSource: RainfallSource = 'observed',
-  summaryOnly = false
-): Promise<DrainageResponse> {
-  const query = new URLSearchParams()
-  if (full) query.set('full', 'true')
-  if (summaryOnly) query.set('summary_only', 'true')
-  if (minutes !== undefined) query.set('window_minutes', String(minutes))
-  if (rainfallSource === 'nowcast') query.set('rainfall_source', rainfallSource)
-  const suffix = query.toString() ? `?${query.toString()}` : ''
-  return (
-    await apiRequest(
-      `/drainage/${encodeURIComponent(event)}${suffix}`,
+      `/flood/summary/${encodeURIComponent(event)}${windowQuery(minutes, source)}`,
       signal
     )
   ).json()
@@ -215,73 +194,30 @@ export async function getRoutes(
   event: string,
   start: RoutePoint,
   end: RoutePoint,
-  riskTolerance: RiskTolerance = 'low',
   signal?: AbortSignal,
   minutes?: number,
-  rainfallSource: RainfallSource = 'observed'
+  tolerance: RiskTolerance = 'low',
+  source: RainfallSource = 'observed'
 ): Promise<RouteComparison> {
-  const result = (await (
+  const result = await (
     await apiRequest('/route', signal, {
       event_date: event,
       origin_lat: start.lat,
       origin_lon: start.lng,
       dest_lat: end.lat,
       dest_lon: end.lng,
-      risk_tolerance: riskTolerance,
       window_minutes: minutes,
-      rainfall_source: rainfallSource,
+      risk_tolerance: tolerance,
+      rainfall_source: source,
     })
-  ).json()) as Partial<RouteComparison> & {
-    normal_route: ApiRoute
-    flood_aware_route?: ApiRoute
-    tolerance_route?: ApiRouteLine
-  }
-
+  ).json()
   if (!result.normal_route || !Number.isFinite(result.normal_route.length_m)) {
-    throw new Error('Unexpected route response. Check API server.')
+    throw new Error('Unexpected route response. Check the API server version.')
   }
-
-  const fallbackRoute = result.flood_aware_route
-  const toleranceRoute =
-    result.tolerance_route?.type === 'LineString' &&
-    Array.isArray(result.tolerance_route.coordinates)
-      ? result.tolerance_route
-      : fallbackRoute
-      ? { type: 'LineString' as const, coordinates: fallbackRoute.coordinates }
-      : undefined
-
-  const normalDistanceKm =
-    result.normal_distance_km ?? result.normal_route.length_m / 1000
-  const toleranceDistanceKm =
-    result.tolerance_distance_km ??
-    (fallbackRoute ? fallbackRoute.length_m / 1000 : normalDistanceKm)
-
-  return {
-    event_date: result.event_date ?? event,
-    normal_route: result.normal_route,
-    normal_distance_km: Number(normalDistanceKm.toFixed(2)),
-    flood_aware_route: fallbackRoute,
-    flood_aware_distance_km: fallbackRoute
-      ? Number((fallbackRoute.length_m / 1000).toFixed(2))
-      : undefined,
-    tolerance_route: toleranceRoute,
-    tolerance_distance_km: Number(toleranceDistanceKm.toFixed(2)),
-    extra_distance_m:
-      result.extra_distance_m ??
-      Math.max(0, (toleranceDistanceKm - normalDistanceKm) * 1000),
-    extra_distance_pct:
-      result.extra_distance_pct ??
-      result.detour_pct ??
-      (normalDistanceKm > 0
-        ? ((toleranceDistanceKm - normalDistanceKm) / normalDistanceKm) * 100
-        : 0),
-    detour_pct: result.detour_pct,
-    risk_tolerance: result.risk_tolerance ?? riskTolerance,
-    max_risk_on_route:
-      result.max_risk_on_route ?? fallbackRoute?.max_risk ?? result.normal_route.max_risk,
-    high_severe_segment_count: result.high_severe_segment_count ?? 0,
-    warning: result.warning ?? null,
+  if (result.tolerance_route !== null && result.tolerance_route?.type !== 'LineString') {
+    throw new Error('The backend does not provide tolerance-aware routes. Restart the updated backend.')
   }
+  return { ...result, suggested_route: result.suggested_route ?? null, warning: result.warning ?? null }
 }
 
 export async function getPointValue(
@@ -290,20 +226,11 @@ export async function getPointValue(
   lat: number,
   signal?: AbortSignal,
   windowMinutes?: number,
-  rainfallSource: RainfallSource = 'observed'
-): Promise<{
-  event_date: string
-  lon: number
-  lat: number
-  fsi: number | null
-  in_station_network?: boolean
-}> {
-  const query = new URLSearchParams({
-    lon: String(lon),
-    lat: String(lat),
-    rainfall_source: rainfallSource,
-  })
+  source: RainfallSource = 'observed'
+): Promise<{ event_date: string; lon: number; lat: number; fsi: number | null; in_station_network?: boolean }> {
+  const query = new URLSearchParams({ lon: String(lon), lat: String(lat) })
   if (windowMinutes !== undefined) query.set('window_minutes', String(windowMinutes))
+  if (source === 'nowcast') query.set('rainfall_source', source)
   return (
     await apiRequest(
       `/flood/point/${encodeURIComponent(event)}?${query}`,
@@ -336,9 +263,7 @@ export async function geocodeAddress(
   // Check local database first for instant matches
   const lower = raw.toLowerCase()
   const localMatch = MUMBAI_LANDMARKS.find(
-    (l) =>
-      l.displayName.toLowerCase().includes(lower) ||
-      lower.includes(l.displayName.split(',')[0].toLowerCase())
+    (l) => l.displayName.toLowerCase().includes(lower) || lower.includes(l.displayName.split(',')[0].toLowerCase())
   )
   if (localMatch) {
     return localMatch
@@ -403,13 +328,7 @@ export async function geocodeSuggest(
         // Merge and deduplicate
         const combined = [...localMatches]
         for (const item of remoteMatches) {
-          if (
-            !combined.some(
-              (c) =>
-                Math.abs(c.lat - item.lat) < 0.001 &&
-                Math.abs(c.lng - item.lng) < 0.001
-            )
-          ) {
+          if (!combined.some((c) => Math.abs(c.lat - item.lat) < 0.001 && Math.abs(c.lng - item.lng) < 0.001)) {
             combined.push(item)
           }
         }

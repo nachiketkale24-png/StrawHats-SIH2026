@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 
 from backend.services.flood_service import flood_service
@@ -7,6 +7,20 @@ from pipeline import config
 from backend.services.event_windows import RainfallSource, WindowMinutes, event_key, get_windows
 
 router = APIRouter(prefix="/flood", tags=["flood"])
+
+
+@router.get('/roads/{event_date}')
+def get_roads(event_date: str, west: float = Query(ge=-180, le=180),
+              south: float = Query(ge=-90, le=90), east: float = Query(ge=-180, le=180),
+              north: float = Query(ge=-90, le=90), window_minutes: WindowMinutes | None = None,
+              rainfall_source: RainfallSource = RainfallSource.OBSERVED):
+    from backend.services.road_risk_service import get_road_risk
+    if west >= east or south >= north:
+        raise HTTPException(status_code=422, detail='Invalid road viewport bounds')
+    try:
+        return get_road_risk(event_key(event_date, window_minutes, rainfall_source), west, south, east, north)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.get('/land-mask')

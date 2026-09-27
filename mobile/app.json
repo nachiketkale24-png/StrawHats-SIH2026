@@ -15,7 +15,6 @@
       "supportsTablet": true
     },
     "android": {
-      "usesCleartextTraffic": true,
       "backgroundColor": "#04040a",
       "adaptiveIcon": {
         "backgroundColor": "#04040a",
@@ -27,7 +26,8 @@
       "navigationBar": {
         "barStyle": "light-content",
         "backgroundColor": "#04040a"
-      }
+      },
+      "package": "com.anonymous.mobile"
     },
     "web": {
       "favicon": "./assets/favicon.png"

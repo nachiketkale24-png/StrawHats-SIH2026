@@ -1,3 +1,4 @@
+import { useTheme } from '../theme/ThemeProvider'
 /**
  * Bottom tab bar matching the web frontend's mobile navigation dock.
  * 4 tabs: Events, Routes, Legend, Inspect — with the same active state styling.
@@ -15,6 +16,8 @@ interface Props {
 }
 
 export default function BottomTabBar({ activeTab, onSelectTab }: Props) {
+  const { colors: Colors } = useTheme()
+  const styles = makeStyles(Colors)
   const insets = useSafeAreaInsets()
   const bottomInset = Platform.OS === 'android' 
     ? Math.max(10, insets.bottom)
@@ -136,7 +139,7 @@ export default function BottomTabBar({ activeTab, onSelectTab }: Props) {
   )
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet.create({
   container: {
     width: '100%',
     flexDirection: 'row',
@@ -144,7 +147,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     borderTopWidth: 1,
     borderTopColor: Colors.borderPrimary,
-    backgroundColor: '#04040a',
+    backgroundColor: Colors.bgVoid,
     paddingTop: 5,
     paddingHorizontal: 8,
     zIndex: 40,
@@ -175,10 +178,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(16,185,129,0.3)',
   },
   tabLabel: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 10,
     color: Colors.textSecondary,
-    letterSpacing: 0.2,
+    letterSpacing: 0,
   },
   tabLabelActiveGold: {
     color: Colors.goldLight,
