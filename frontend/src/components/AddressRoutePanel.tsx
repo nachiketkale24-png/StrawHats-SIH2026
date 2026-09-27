@@ -172,14 +172,14 @@ export default function AddressRoutePanel({ onRouteFound, onClear, disabled, rou
       <form onSubmit={handleSubmit} className="flex flex-col gap-2.5">
         {/* Start point */}
         <div className="relative">
-          <label htmlFor={`${fieldId}-from`} className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">From</label>
-          <div className="flex items-center rounded-lg border border-[var(--border-secondary)] bg-[var(--bg-primary)] px-2.5 focus-within:border-[var(--gold-primary)]">
+          <label htmlFor={`${fieldId}-from`} className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">From (Origin)</label>
+          <div className="flex items-center rounded-xl border border-[var(--border-secondary)] bg-[var(--bg-primary)] px-3 focus-within:border-[var(--gold-primary)] shadow-sm transition-all">
             <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-[10px] font-bold text-emerald-400">A</span>
             <input
               id={`${fieldId}-from`}
               type="text"
-              className="w-full bg-transparent px-2.5 py-2 text-xs md:text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none"
-              placeholder="Origin / Start location"
+              className="w-full bg-transparent px-2.5 py-2 text-xs md:text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none font-medium"
+              placeholder="Origin / Start landmark"
               value={startQuery}
               onChange={(e) => setStartQuery(e.target.value)}
               onFocus={() => setStartFocused(true)}
@@ -189,7 +189,7 @@ export default function AddressRoutePanel({ onRouteFound, onClear, disabled, rou
             {startQuery && (
               <button
                 type="button"
-                className="p-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                className="p-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition"
                 onClick={() => setStartQuery('')}
               >
                 <X size={14} />
@@ -206,7 +206,7 @@ export default function AddressRoutePanel({ onRouteFound, onClear, disabled, rou
         <div className="flex items-center justify-between px-1">
           <button
             type="button"
-            className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[var(--cyan-primary)] hover:underline active:opacity-75 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[var(--cyan-primary)] hover:underline active:opacity-75 disabled:opacity-50"
             onClick={handleUseLocation}
             disabled={disabled || loading}
           >
@@ -217,7 +217,7 @@ export default function AddressRoutePanel({ onRouteFound, onClear, disabled, rou
           <button
             type="button"
             title="Swap Origin and Destination"
-            className="flex h-6 w-6 items-center justify-center rounded border border-[var(--border-secondary)] bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--gold-light)] active:scale-95"
+            className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border-secondary)] bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--gold-light)] hover:border-[var(--border-active)] active:scale-95 transition shadow-sm"
             onClick={handleSwap}
             disabled={disabled || loading}
           >
@@ -227,14 +227,14 @@ export default function AddressRoutePanel({ onRouteFound, onClear, disabled, rou
 
         {/* Destination point */}
         <div className="relative">
-          <label htmlFor={`${fieldId}-to`} className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">To</label>
-          <div className="flex items-center rounded-lg border border-[var(--border-secondary)] bg-[var(--bg-primary)] px-2.5 focus-within:border-[var(--gold-primary)]">
+          <label htmlFor={`${fieldId}-to`} className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">To (Destination)</label>
+          <div className="flex items-center rounded-xl border border-[var(--border-secondary)] bg-[var(--bg-primary)] px-3 focus-within:border-[var(--gold-primary)] shadow-sm transition-all">
             <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-[10px] font-bold text-cyan-400">B</span>
             <input
               id={`${fieldId}-to`}
               type="text"
-              className="w-full bg-transparent px-2.5 py-2 text-xs md:text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none"
-              placeholder="Destination in Mumbai"
+              className="w-full bg-transparent px-2.5 py-2 text-xs md:text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none font-medium"
+              placeholder="Destination landmark in Mumbai"
               value={endQuery}
               onChange={(e) => setEndQuery(e.target.value)}
               onFocus={() => setEndFocused(true)}
@@ -244,7 +244,7 @@ export default function AddressRoutePanel({ onRouteFound, onClear, disabled, rou
             {endQuery && (
               <button
                 type="button"
-                className="p-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                className="p-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition"
                 onClick={() => setEndQuery('')}
               >
                 <X size={14} />
@@ -259,16 +259,16 @@ export default function AddressRoutePanel({ onRouteFound, onClear, disabled, rou
 
         {/* Quick presets */}
         <div>
-          <div className="mb-1.5 flex items-center gap-1 text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">
-            <Sparkles size={10} className="text-[var(--gold-light)]" />
-            Quick Destinations
+          <div className="mb-1.5 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+            <Sparkles size={11} className="text-[var(--gold-light)]" />
+            Popular Mumbai Hubs
           </div>
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-1.5">
             {MUMBAI_PRESETS.map(preset => (
               <button
                 key={preset.name}
                 type="button"
-                className="rounded border border-[var(--border-secondary)] bg-[var(--bg-secondary)] px-2 py-1 text-[10px] text-[var(--text-secondary)] transition hover:border-[var(--gold-primary)] hover:text-[var(--text-primary)] active:scale-95"
+                className="rounded-lg border border-[var(--border-secondary)] bg-[var(--bg-secondary)] px-2.5 py-1 text-[10px] font-medium text-[var(--text-secondary)] transition hover:border-[var(--border-active)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-primary)] active:scale-95 shadow-xs"
                 onClick={() => applyPreset(preset.query)}
                 disabled={disabled || loading}
               >
@@ -281,7 +281,7 @@ export default function AddressRoutePanel({ onRouteFound, onClear, disabled, rou
         {/* Submit button */}
         <button
           type="submit"
-          className="hud-button flex h-10 w-full items-center justify-center gap-2 rounded-lg text-xs font-semibold uppercase tracking-wider shadow-lg"
+          className="hud-button flex h-10 w-full items-center justify-center gap-2 rounded-xl text-xs font-bold uppercase tracking-wider shadow-lg transition-all"
           disabled={disabled || loading || !startQuery.trim() || !endQuery.trim()}
         >
           {loading ? (
@@ -298,12 +298,12 @@ export default function AddressRoutePanel({ onRouteFound, onClear, disabled, rou
       {/* Messages */}
       <div role="status">
         {error && (
-          <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300">
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-2.5 text-xs text-red-300">
             {error}
           </div>
         )}
         {routeStatus && (
-          <div className="flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-2 text-xs text-cyan-300">
+          <div className="flex items-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 p-2.5 text-xs text-cyan-300">
             <Loader2 size={13} className="animate-spin shrink-0" />
             <span>{routeStatus}</span>
           </div>
@@ -313,7 +313,7 @@ export default function AddressRoutePanel({ onRouteFound, onClear, disabled, rou
       {hasRoute && (
         <button
           type="button"
-          className="hud-button flex h-9 w-full items-center justify-center gap-1.5 border-rose-500/30 text-rose-300 hover:border-rose-500 hover:text-rose-200"
+          className="hud-button flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border-rose-500/30 text-rose-300 hover:border-rose-500 hover:text-rose-200"
           onClick={handleClear}
         >
           <X size={14} />

@@ -26,6 +26,14 @@ def get_roads(event_date: str, west: float = Query(ge=-180, le=180),
 @router.get('/land-mask')
 def get_land_mask():
     if not config.LAND_MASK_TIF.exists():
+        try:
+            from pipeline.landcover_processing import ensure_land_mask
+            ensure_land_mask()
+        except Exception:
+            pass
+    if not config.LAND_MASK_TIF.exists():
+        if config.COVERAGE_MASK_TIF.exists():
+            return FileResponse(config.COVERAGE_MASK_TIF, media_type='image/tiff')
         raise HTTPException(status_code=404, detail='Land display mask missing; run the offline land-cover processing.')
     return FileResponse(config.LAND_MASK_TIF, media_type='image/tiff')
 

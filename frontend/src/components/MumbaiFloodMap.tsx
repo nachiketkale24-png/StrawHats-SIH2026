@@ -303,14 +303,14 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
 
       {/* Loading / Status Toast Banner */}
       {(!ready || error || rasterStatus || drainageStatus || apiError) && (
-        <div className="pointer-events-none absolute inset-x-3 top-3 z-30 flex justify-center">
-          <div className="pointer-events-auto flex items-center gap-2 rounded-xl border border-[var(--border-primary)] bg-[var(--bg-panel)] px-4 py-2.5 text-xs text-[var(--text-primary)] shadow-2xl backdrop-blur-xl">
+        <div className="pointer-events-none absolute inset-x-3 top-4 lg:top-24 z-50 flex justify-center transition-all">
+          <div className="pointer-events-auto flex items-center gap-2.5 rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-panel)] px-4 py-2.5 text-xs text-[var(--text-primary)] shadow-2xl backdrop-blur-2xl">
             {error || apiError ? (
-              <AlertCircle size={15} className="text-amber-400 shrink-0" />
+              <AlertCircle size={16} className="text-amber-500 shrink-0" />
             ) : (
               <div className="h-2 w-2 rounded-full bg-[var(--cyan-primary)] animate-ping shrink-0" />
             )}
-            <span className="font-medium">{error || apiError || rasterStatus || drainageStatus || 'Initializing Mumbai Map…'}</span>
+            <span className="font-semibold">{error || apiError || rasterStatus || drainageStatus || 'Initializing Mumbai Map…'}</span>
           </div>
         </div>
       )}
@@ -382,32 +382,35 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
                   </button>
                 </div>
 
-                <label className="mt-2.5 block text-[11px] text-[var(--text-secondary)]">
-                  Rainfall source
+                <label className="mt-2.5 block text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                  Rainfall Source
                   <select
                     aria-label="Rainfall source"
-                    className="mt-1 w-full rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] px-3 py-2 text-xs font-medium text-[var(--text-primary)] focus:outline-none focus:border-[var(--gold-primary)]"
+                    className="mt-1 w-full rounded-xl border border-[var(--border-secondary)] bg-[var(--bg-primary)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] shadow-sm focus:outline-none focus:border-[var(--gold-primary)] transition"
                     value={rainfallSource}
                     onChange={e => { setRainfallSource(e.target.value as RainfallSource); setRoutes(null); setSummary(null); setApiError('') }}
                   >
                     <option value="nowcast">Model nowcast — forecast</option>
-                    <option value="observed">Observed rainfall — comparison only</option>
+                    <option value="observed">Observed rainfall — comparison</option>
                   </select>
                 </label>
 
-                <select
-                  aria-label="Rainfall event selection"
-                  className="mt-2.5 w-full rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] px-3 py-2 text-xs lg:text-sm font-medium text-[var(--text-primary)] focus:outline-none focus:border-[var(--gold-primary)]"
-                  value={event}
-                  disabled={eventsLoading || !events.length}
-                  onChange={e => { setEvent(e.target.value); setRoutes(null); setSummary(null); setApiError('') }}
-                >
-                  {!events.length && <option value="">{eventsLoading ? 'Loading events…' : 'No events found'}</option>}
-                  {events.map(date => <option key={date} value={date}>{date}</option>)}
-                </select>
+                <label className="mt-2.5 block text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                  Event Date
+                  <select
+                    aria-label="Rainfall event selection"
+                    className="mt-1 w-full rounded-xl border border-[var(--border-secondary)] bg-[var(--bg-primary)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] shadow-sm focus:outline-none focus:border-[var(--gold-primary)] transition"
+                    value={event}
+                    disabled={eventsLoading || !events.length}
+                    onChange={e => { setEvent(e.target.value); setRoutes(null); setSummary(null); setApiError('') }}
+                  >
+                    {!events.length && <option value="">{eventsLoading ? 'Loading events…' : 'No events found'}</option>}
+                    {events.map(date => <option key={date} value={date}>{date}</option>)}
+                  </select>
+                </label>
 
                 {summary && (
-                  <div className="mt-3 rounded-lg border border-[var(--border-secondary)] bg-[var(--bg-primary)] p-2.5 font-[family-name:var(--font-hud)]">
+                  <div className="mt-3 rounded-xl border border-[var(--border-secondary)] bg-[var(--bg-primary)] p-2.5 font-[family-name:var(--font-hud)] shadow-sm">
                     <div className="flex justify-between text-[11px] text-[var(--text-secondary)]">
                       <span>MIN: <b className="text-[var(--text-primary)]">{summary.fsi_min.toFixed(2)}</b></span>
                       <span>MEAN: <b className="text-[var(--cyan-primary)]">{summary.fsi_mean.toFixed(2)}</b></span>
@@ -418,12 +421,12 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
 
                 {intervalReady && (
                   <a
-                    className="mt-3 flex items-center justify-center gap-1.5 rounded-lg border border-[var(--border-secondary)] bg-[var(--bg-secondary)] py-2 text-xs text-[var(--gold-light)] transition hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10"
+                    className="download-geotiff-btn mt-3 flex items-center justify-center gap-2 rounded-xl border-2 border-amber-500/80 bg-amber-400/20 py-2.5 text-xs font-bold text-black shadow-sm transition hover:bg-amber-400/30 hover:border-amber-600 dark:border-amber-400/70 dark:bg-amber-400/15 dark:text-white dark:hover:bg-amber-400/25"
                     href={`${API_BASE}/flood/raster/${encodeURIComponent(event)}${windowQuery(selectedMinutes, rainfallSource)}`}
                     download
                   >
-                    <Download size={13} />
-                    Download GeoTIFF Raster
+                    <Download size={14} className="download-geotiff-btn stroke-[2.5]" />
+                    <span className="download-geotiff-btn font-bold">Download GeoTIFF</span>
                   </a>
                 )}
               </Panel></MapCard>
@@ -493,11 +496,11 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
                   Navigation & Analysis
                 </PanelLabel>
 
-                <div className="my-2.5 flex gap-1 rounded-lg border border-[var(--border-secondary)] bg-[var(--bg-primary)] p-0.5">
+                <div className="my-2.5 flex gap-1 rounded-xl border border-[var(--border-secondary)] bg-[var(--bg-primary)] p-1 backdrop-blur-md shadow-inner">
                   <button
                     disabled={disabled}
                     aria-pressed={mode === 'inspect'}
-                    className={`flex-1 rounded-md py-1.5 text-center text-xs transition ${mode === 'inspect' ? 'bg-[var(--gold-primary)] font-semibold text-[var(--bg-primary)] shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                    className={`flex-1 rounded-lg py-2 text-center text-xs font-bold transition ${mode === 'inspect' ? 'bg-sky-600 text-white dark:bg-amber-400 dark:text-slate-950 shadow-md' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
                     onClick={() => setMode('inspect')}
                   >
                     Inspect
@@ -505,7 +508,7 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
                   <button
                     disabled={disabled}
                     aria-pressed={mode === 'route'}
-                    className={`flex-1 rounded-md py-1.5 text-center text-xs transition ${mode === 'route' ? 'bg-[var(--gold-primary)] font-semibold text-[var(--bg-primary)] shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                    className={`flex-1 rounded-lg py-2 text-center text-xs font-bold transition ${mode === 'route' ? 'bg-sky-600 text-white dark:bg-amber-400 dark:text-slate-950 shadow-md' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
                     onClick={() => setMode('route')}
                   >
                     Map Pin
@@ -513,7 +516,7 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
                   <button
                     disabled={disabled}
                     aria-pressed={mode === 'route-address'}
-                    className={`flex-1 rounded-md py-1.5 text-center text-xs transition ${mode === 'route-address' ? 'bg-[var(--gold-primary)] font-semibold text-[var(--bg-primary)] shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                    className={`flex-1 rounded-lg py-2 text-center text-xs font-bold transition ${mode === 'route-address' ? 'bg-sky-600 text-white dark:bg-amber-400 dark:text-slate-950 shadow-md' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
                     onClick={() => setMode('route-address')}
                   >
                     Address
@@ -539,8 +542,8 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
                 )}
 
                 {mode === 'route' && points.map((p, i) => (
-                  <div key={i} className="mt-2 flex items-center justify-between rounded border border-[var(--border-secondary)] bg-[var(--bg-primary)] px-2.5 py-1.5 font-[family-name:var(--font-hud)] text-xs">
-                    <span className="font-bold text-[var(--gold-light)]">{i === 0 ? 'A (Start)' : 'B (Dest)'}</span>
+                  <div key={i} className="mt-2 flex items-center justify-between rounded-xl border border-[var(--border-secondary)] bg-[var(--bg-primary)] px-2.5 py-1.5 font-[family-name:var(--font-hud)] text-xs">
+                    <span className="font-bold text-sky-600 dark:text-amber-300">{i === 0 ? 'A (Start)' : 'B (Dest)'}</span>
                     <span className="text-[var(--text-secondary)]">{p.lat.toFixed(4)}, {p.lng.toFixed(4)}</span>
                   </div>
                 ))}
@@ -587,44 +590,56 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
       </button>
 
       {/* DESKTOP TIMELINE DOCK (Bottom center) */}
-      <section aria-label="FSI time interval" className="pointer-events-none absolute bottom-5 left-1/2 z-10 hidden w-[min(92%,36rem)] -translate-x-1/2 lg:block">
+      <section aria-label="FSI time interval" className="pointer-events-none absolute bottom-5 left-1/2 z-20 hidden w-[min(90%,36rem)] -translate-x-1/2 lg:block">
         <MapCard title="Rainfall time window" hidden={!desktopHudVisible} className="pointer-events-auto">
-        <div className="pointer-events-auto hud-panel p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <PanelLabel className="flex items-center gap-1.5">
-              <Clock size={12} className="text-[var(--cyan-primary)]" />
-              {activeWindow ? `${rainfallSource === 'nowcast' ? 'Nowcast' : 'Observed'} Accumulation Window (${minutes} min)` : 'Rainfall Accumulation Window'}
-            </PanelLabel>
-            {activeWindow && (
-              <span className="font-[family-name:var(--font-hud)] text-[11px] text-[var(--gold-light)]">
-                {activeWindow.start_time.slice(11, 16)} → {activeWindow.end_time.slice(11, 16)}
-              </span>
-            )}
-          </div>
+          <div className="pointer-events-auto hud-panel p-3 shadow-xl backdrop-blur-2xl">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Clock size={13} className="text-[var(--cyan-primary)]" />
+                <span className="font-[family-name:var(--font-hud)] text-[11px] font-bold uppercase tracking-wider text-[var(--text-heading)]">
+                  {rainfallSource === 'nowcast' ? 'Forecast Window' : 'Observed Window'}
+                  {minutes ? ` (${minutes} min)` : ''}
+                </span>
+              </div>
+              {activeWindow && (
+                <div className="timeline-window-badge flex items-center gap-1.5 rounded-md px-2.5 py-0.5 text-[11px] font-mono font-bold shadow-xs">
+                  <span>{activeWindow.start_time.slice(11, 16)}</span>
+                  <span className="timeline-arrow">→</span>
+                  <span>{activeWindow.end_time.slice(11, 16)}</span>
+                </div>
+              )}
+            </div>
 
-          <div role="group" aria-label="Rainfall duration intervals" className="grid grid-cols-6 gap-1.5">
-            {[15, 30, 60, 90, 120, 180].map(val => (
-              <button
-                key={val}
-                className="hud-button h-8 px-1 text-xs font-semibold"
-                disabled={disabled || !windows?.windows.some(w => w.minutes === val)}
-                aria-pressed={!!activeWindow && val === minutes}
-                onClick={() => { setMinutes(val); setRoutes(null); setSummary(null); setRouteStatus('') }}
-              >
-                {val}m
-              </button>
-            ))}
+            <div role="group" aria-label="Rainfall duration intervals" className="grid grid-cols-6 gap-1.5">
+              {[15, 30, 60, 90, 120, 180].map(val => {
+                const active = !!activeWindow && val === minutes
+                return (
+                  <button
+                    key={val}
+                    className={`hud-button flex h-9 items-center justify-center rounded-lg text-xs font-bold transition-all ${
+                      active
+                        ? 'bg-sky-600 text-white dark:bg-amber-400 dark:text-slate-950 shadow-sm'
+                        : ''
+                    }`}
+                    disabled={disabled || !windows?.windows.some(w => w.minutes === val)}
+                    aria-pressed={active}
+                    onClick={() => { setMinutes(val); setRoutes(null); setSummary(null); setRouteStatus('') }}
+                  >
+                    {val}m
+                  </button>
+                )
+              })}
+            </div>
           </div>
-        </div>
         </MapCard>
       </section>
 
       {/* MOBILE BOTTOM NAVIGATION DOCK (4 Tabs) */}
-      <nav aria-label="Mobile Navigation" className="absolute bottom-0 inset-x-0 z-30 flex lg:hidden items-center justify-around border-t border-[var(--border-primary)] bg-[var(--bg-sheet)] px-2 py-2 backdrop-blur-xl pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      <nav aria-label="Mobile Navigation" className="absolute bottom-0 inset-x-0 z-30 flex lg:hidden items-center justify-around border-t border-[var(--border-primary)] bg-[var(--bg-glass-nav)] px-2 py-2 backdrop-blur-2xl pb-[max(0.6rem,env(safe-area-inset-bottom))] shadow-2xl">
         <button
           type="button"
           aria-pressed={mobileTab === 'events'}
-          className={`flex flex-col items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-medium transition ${mobileTab === 'events' ? 'text-[var(--gold-light)] bg-[var(--gold-primary)]/15 font-bold' : 'text-[var(--text-secondary)]'}`}
+          className={`flex flex-col items-center gap-1 px-3 py-1.5 rounded-xl text-[10px] font-semibold transition ${mobileTab === 'events' ? 'text-[var(--gold-light)] bg-[var(--gold-primary)]/20 shadow-sm' : 'text-[var(--text-secondary)]'}`}
           onClick={() => setMobileTab(current => current === 'events' ? null : 'events')}
         >
           <Calendar size={18} />
@@ -634,7 +649,7 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
         <button
           type="button"
           aria-pressed={mobileTab === 'routes'}
-          className={`flex flex-col items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-medium transition ${mobileTab === 'routes' ? 'text-[var(--cyan-primary)] bg-[var(--cyan-primary)]/15 font-bold' : 'text-[var(--text-secondary)]'}`}
+          className={`flex flex-col items-center gap-1 px-3 py-1.5 rounded-xl text-[10px] font-semibold transition ${mobileTab === 'routes' ? 'text-[var(--cyan-primary)] bg-[var(--cyan-primary)]/20 shadow-sm' : 'text-[var(--text-secondary)]'}`}
           onClick={() => {
             setMobileTab(current => current === 'routes' ? null : 'routes')
             if (mode === 'inspect') setMode('route-address')
@@ -647,7 +662,7 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
         <button
           type="button"
           aria-pressed={mobileTab === 'legend'}
-          className={`flex flex-col items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-medium transition ${mobileTab === 'legend' ? 'text-[var(--gold-light)] bg-[var(--gold-primary)]/15 font-bold' : 'text-[var(--text-secondary)]'}`}
+          className={`flex flex-col items-center gap-1 px-3 py-1.5 rounded-xl text-[10px] font-semibold transition ${mobileTab === 'legend' ? 'text-[var(--gold-light)] bg-[var(--gold-primary)]/20 shadow-sm' : 'text-[var(--text-secondary)]'}`}
           onClick={() => setMobileTab(current => current === 'legend' ? null : 'legend')}
         >
           <Layers size={18} />
@@ -657,7 +672,7 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
         <button
           type="button"
           aria-pressed={mode === 'inspect' && mobileTab === null}
-          className={`flex flex-col items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-medium transition ${mode === 'inspect' && mobileTab === null ? 'text-emerald-400 bg-emerald-500/15 font-bold' : 'text-[var(--text-secondary)]'}`}
+          className={`flex flex-col items-center gap-1 px-3 py-1.5 rounded-xl text-[10px] font-semibold transition ${mode === 'inspect' && mobileTab === null ? 'text-emerald-400 bg-emerald-500/20 shadow-sm' : 'text-[var(--text-secondary)]'}`}
           onClick={() => {
             setMode('inspect')
             setMobileTab(null)
@@ -677,7 +692,7 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="absolute inset-0 z-30 bg-black/50 backdrop-blur-sm lg:hidden"
+              className="absolute inset-0 z-30 bg-black/60 backdrop-blur-md lg:hidden"
               onClick={() => setMobileTab(null)}
             />
 
@@ -686,15 +701,15 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 26, stiffness: 280 }}
-              className="absolute bottom-[56px] inset-x-0 z-40 max-h-[75vh] overflow-hidden rounded-t-2xl border-t border-[var(--border-primary)] bg-[var(--bg-sheet)] p-4 shadow-2xl backdrop-blur-2xl lg:hidden flex flex-col"
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              className="absolute bottom-[58px] inset-x-0 z-40 max-h-[78vh] overflow-hidden rounded-t-3xl border-t border-[var(--border-primary)] bg-[var(--bg-sheet)] p-4 shadow-2xl backdrop-blur-2xl lg:hidden flex flex-col"
             >
               {/* Drag handle / Header */}
               <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-2.5">
                 <div className="flex items-center gap-2">
-                  <div className="h-1.5 w-8 rounded-full bg-slate-600 mr-2" />
+                  <div className="h-1.5 w-8 rounded-full bg-slate-500/40 mr-2" />
                   <h3 className="font-[family-name:var(--font-hud)] text-xs font-bold uppercase tracking-wider text-[var(--text-heading)]">
-                    {mobileTab === 'events' && '📅 Rainfall Events & Time Intervals'}
+                    {mobileTab === 'events' && '📅 Rainfall Events & Intervals'}
                     {mobileTab === 'routes' && '🧭 Safe Flood-Aware Routing'}
                     {mobileTab === 'legend' && '📊 Layers & Susceptibility Scale'}
                   </h3>
@@ -702,7 +717,7 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
                 <button
                   type="button"
                   aria-label="Close sheet"
-                  className="rounded-full p-1 text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)]"
+                  className="rounded-full p-1.5 text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)] transition"
                   onClick={() => setMobileTab(null)}
                 >
                   <X size={16} />
@@ -713,22 +728,22 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
               <div className="overflow-y-auto pt-3 pb-6 flex-1 space-y-4">
                 {/* EVENTS TAB CONTENT */}
                 {mobileTab === 'events' && (
-                  <div className="space-y-3">
+                  <div className="space-y-3.5">
                     <div>
-                      <PanelLabel className="mb-1.5">Rainfall source and historical date</PanelLabel>
+                      <PanelLabel className="mb-1.5">Rainfall Source &amp; Event</PanelLabel>
                       <select
                         aria-label="Rainfall source"
-                        className="mb-2 w-full rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm font-medium text-[var(--text-primary)]"
+                        className="mb-2 w-full rounded-xl border border-[var(--border-secondary)] bg-[var(--bg-primary)] px-3 py-2.5 text-xs font-semibold text-[var(--text-primary)] shadow-sm focus:outline-none focus:border-[var(--gold-primary)]"
                         value={rainfallSource}
                         onChange={e => { setRainfallSource(e.target.value as RainfallSource); setRoutes(null); setSummary(null); setApiError('') }}
                       >
                         <option value="nowcast">Model nowcast — forecast</option>
-                        <option value="observed">Observed rainfall — comparison only</option>
+                        <option value="observed">Observed rainfall — comparison</option>
                       </select>
                       <div className="flex gap-2">
                         <select
                           aria-label="Rainfall event selection"
-                          className="w-full rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm font-medium text-[var(--text-primary)]"
+                          className="w-full rounded-xl border border-[var(--border-secondary)] bg-[var(--bg-primary)] px-3 py-2.5 text-xs font-semibold text-[var(--text-primary)] shadow-sm focus:outline-none focus:border-[var(--gold-primary)]"
                           value={event}
                           disabled={eventsLoading || !events.length}
                           onChange={e => { setEvent(e.target.value); setRoutes(null); setSummary(null); setApiError('') }}
@@ -740,7 +755,7 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
                           type="button"
                           aria-label="Refresh events"
                           disabled={eventsLoading}
-                          className="hud-button flex h-11 w-11 shrink-0 items-center justify-center rounded-lg"
+                          className="hud-button flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
                           onClick={() => setRefresh(v => v + 1)}
                         >
                           <RefreshCw size={15} className={eventsLoading ? 'animate-spin' : ''} />
@@ -753,16 +768,18 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
                       <div className="mb-1.5 flex items-center justify-between">
                         <PanelLabel>Accumulation Window</PanelLabel>
                         {activeWindow && (
-                          <span className="font-[family-name:var(--font-hud)] text-[11px] text-[var(--gold-light)]">
-                            {activeWindow.start_time.slice(11, 16)} → {activeWindow.end_time.slice(11, 16)}
-                          </span>
+                          <div className="timeline-window-badge flex items-center gap-1 rounded-md px-2 py-0.5 font-mono text-[11px] font-bold shadow-xs">
+                            <span>{activeWindow.start_time.slice(11, 16)}</span>
+                            <span className="timeline-arrow">→</span>
+                            <span>{activeWindow.end_time.slice(11, 16)}</span>
+                          </div>
                         )}
                       </div>
                       <div className="grid grid-cols-3 gap-1.5">
                         {[15, 30, 60, 90, 120, 180].map(val => (
                           <button
                             key={val}
-                            className="hud-button h-10 px-2 text-xs font-semibold"
+                            className="hud-button h-10 px-2 text-xs font-bold"
                             disabled={disabled || !windows?.windows.some(w => w.minutes === val)}
                             aria-pressed={!!activeWindow && val === minutes}
                             onClick={() => { setMinutes(val); setRoutes(null); setSummary(null); setRouteStatus('') }}
@@ -775,19 +792,19 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
 
                     {/* FSI Stats */}
                     {summary && (
-                      <div className="rounded-xl border border-[var(--border-secondary)] bg-[var(--bg-primary)] p-3 font-[family-name:var(--font-hud)]">
-                        <div className="text-[10px] uppercase tracking-wider text-[var(--text-secondary)] mb-1">Event Summary Index</div>
+                      <div className="rounded-2xl border border-[var(--border-secondary)] bg-[var(--bg-primary)] p-3 font-[family-name:var(--font-hud)] shadow-sm">
+                        <div className="text-[10px] uppercase font-bold tracking-wider text-[var(--text-secondary)] mb-2">Event Summary Statistics</div>
                         <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                          <div className="rounded bg-[var(--bg-secondary)] p-2">
-                            <span className="text-[10px] text-[var(--text-secondary)] block">MIN</span>
+                          <div className="rounded-xl bg-[var(--bg-secondary)] p-2">
+                            <span className="text-[10px] text-[var(--text-secondary)] block font-medium">MIN</span>
                             <b className="text-[var(--text-primary)]">{summary.fsi_min.toFixed(2)}</b>
                           </div>
-                          <div className="rounded bg-[var(--bg-secondary)] p-2">
-                            <span className="text-[10px] text-[var(--text-secondary)] block">MEAN</span>
+                          <div className="rounded-xl bg-[var(--bg-secondary)] p-2">
+                            <span className="text-[10px] text-[var(--text-secondary)] block font-medium">MEAN</span>
                             <b className="text-[var(--cyan-primary)]">{summary.fsi_mean.toFixed(2)}</b>
                           </div>
-                          <div className="rounded bg-[var(--bg-secondary)] p-2">
-                            <span className="text-[10px] text-[var(--text-secondary)] block">MAX</span>
+                          <div className="rounded-xl bg-[var(--bg-secondary)] p-2">
+                            <span className="text-[10px] text-[var(--text-secondary)] block font-medium">MAX</span>
                             <b className="text-amber-400">{summary.fsi_max.toFixed(2)}</b>
                           </div>
                         </div>
@@ -796,12 +813,12 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
 
                     {intervalReady && (
                       <a
-                        className="flex items-center justify-center gap-2 rounded-xl border border-[var(--gold-primary)]/40 bg-[var(--gold-primary)]/10 py-3 text-xs font-semibold text-[var(--gold-light)]"
+                        className="download-geotiff-btn flex items-center justify-center gap-2 rounded-xl border-2 border-amber-500/80 bg-amber-400/20 py-3 text-xs font-bold text-black shadow-sm transition hover:bg-amber-400/30 hover:border-amber-600 dark:border-amber-400/70 dark:bg-amber-400/15 dark:text-white dark:hover:bg-amber-400/25"
                         href={`${API_BASE}/flood/raster/${encodeURIComponent(event)}${windowQuery(selectedMinutes, rainfallSource)}`}
                         download
                       >
-                        <Download size={14} />
-                        Download FSI GeoTIFF
+                        <Download size={15} className="download-geotiff-btn stroke-[2.5]" />
+                        <span className="download-geotiff-btn font-bold">Download FSI GeoTIFF</span>
                       </a>
                     )}
                   </div>
@@ -810,23 +827,23 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
                 {/* ROUTES TAB CONTENT */}
                 {mobileTab === 'routes' && (
                   <div className="space-y-3">
-                    <div className="flex gap-1 rounded-lg border border-[var(--border-secondary)] bg-[var(--bg-primary)] p-0.5">
+                    <div className="flex gap-1 rounded-xl border border-[var(--border-secondary)] bg-[var(--bg-primary)] p-1 shadow-inner backdrop-blur-md">
                       <button
                         type="button"
-                        className={`flex-1 rounded-md py-2 text-center text-xs font-medium transition ${mode === 'route-address' ? 'bg-[var(--gold-primary)] font-semibold text-[var(--bg-primary)]' : 'text-[var(--text-secondary)]'}`}
+                        className={`flex-1 rounded-lg py-2 text-center text-xs font-bold transition ${mode === 'route-address' ? 'bg-sky-600 text-white dark:bg-amber-400 dark:text-slate-950 shadow-md' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
                         onClick={() => setMode('route-address')}
                       >
                         Address Search
                       </button>
                       <button
                         type="button"
-                        className={`flex-1 rounded-md py-2 text-center text-xs font-medium transition ${mode === 'route' ? 'bg-[var(--gold-primary)] font-semibold text-[var(--bg-primary)]' : 'text-[var(--text-secondary)]'}`}
+                        className={`flex-1 rounded-lg py-2 text-center text-xs font-bold transition ${mode === 'route' ? 'bg-sky-600 text-white dark:bg-amber-400 dark:text-slate-950 shadow-md' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
                         onClick={() => {
                           setMode('route')
                           setMobileTab(null) // Dismiss sheet to let user tap points on map
                         }}
                       >
-                        Pick Points on Map
+                        Pick on Map
                       </button>
                     </div>
 

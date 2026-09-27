@@ -39,20 +39,24 @@ export async function loadEventRaster(event: string, signal: AbortSignal, minute
   return cachedDisplay(key, signal, () => renderEventRaster(event, new AbortController().signal, minutes, rainfallSource))
 }
 async function renderEventRaster(event: string, signal: AbortSignal, minutes: number | undefined, rainfallSource: RainfallSource) {
-  const [raster, land] = await Promise.all([
+  const [raster, landResult] = await Promise.allSettled([
     readAlignedRaster(`/flood/raster/${encodeURIComponent(event)}${windowQuery(minutes, rainfallSource)}`, signal),
     cachedDisplay('land-mask', signal, () => readAlignedRaster('/flood/land-mask', new AbortController().signal), Infinity),
   ])
-  const { values, width, height, bounds, nodata } = raster
-  if (land.width !== width || land.height !== height || land.bounds.some((value, i) => Math.abs(value - bounds[i]) > 1e-9)) {
-    throw new Error('Land mask must match the flood raster grid')
-  }
+  
+  if (raster.status === 'rejected') throw raster.reason
+  const { values, width, height, bounds, nodata } = raster.value
+  
+  const land = landResult.status === 'fulfilled' ? landResult.value : null
+  const hasMatchingLand = land && land.width === width && land.height === height
+  
   const valid = Uint8Array.from(values, value => Number.isFinite(value) && value !== nodata && value >= 0 && value <= 1 ? 1 : 0)
   const opacity = featherRasterMask(valid, width, height)
   const url = canvasFromPixels(width, height, pixels => {
     for (let i = 0; i < width * height; i++) {
       const value = Number(values[i])
-      if (!Number.isFinite(value) || value === nodata || value < 0 || value > 1 || land.values[i] !== 1) continue
+      if (!Number.isFinite(value) || value === nodata || value < 0 || value > 1) continue
+      if (hasMatchingLand && land.values[i] !== 1) continue
       const color = FSI_COLORS[Math.min(3, Math.floor(value * 4))]
       pixels.data[i * 4] = parseInt(color.slice(1, 3), 16)
       pixels.data[i * 4 + 1] = parseInt(color.slice(3, 5), 16)
