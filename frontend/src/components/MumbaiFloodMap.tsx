@@ -13,6 +13,7 @@ import { useMapInspection } from '../hooks/useMapInspection'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   AlertCircle,
+  Briefcase,
   Calendar,
   Clock,
   Crosshair,
@@ -31,6 +32,7 @@ import {
 import { useGoogleMumbaiMap } from '../hooks/useGoogleMumbaiMap'
 import Panel, { PanelCaption, PanelLabel } from './ui/Panel'
 import AddressRoutePanel from './AddressRoutePanel'
+import CommuteMonitor from './CommuteMonitor'
 import { RiskToleranceSelector } from './RoutePanel'
 import type { RiskTolerance } from './RoutePanel'
 import { API_BASE, getDrainage, getEvents, getRoutes, getSummary, getWindows, windowQuery } from '../lib/floodApi'
@@ -40,7 +42,7 @@ import { clearDrainageLayers, updateDrainageLayers } from '../lib/googleDrainage
 import { clearDisplayCache } from '../lib/displayCache'
 import type { MapMode, RoutePoint } from '../types/flood'
 
-type MobileTab = 'events' | 'routes' | 'legend' | null
+type MobileTab = 'events' | 'routes' | 'commute' | 'legend' | null
 
 function RouteSuggestion({ route, onAccept }: {
   route: RouteComparison['suggested_route']
@@ -473,7 +475,7 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
-              className="pointer-events-auto flex w-80 flex-col gap-3"
+              className={`pointer-events-auto flex flex-col gap-3 transition-all duration-300 ${mode === 'commute' ? 'w-96 lg:w-[440px] max-w-[calc(100vw-2rem)]' : 'w-80'}`}
             >
               {/* Map Layer Controls */}
               <div className="flex gap-2">
@@ -500,7 +502,7 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
                   <button
                     disabled={disabled}
                     aria-pressed={mode === 'inspect'}
-                    className={`flex-1 rounded-lg py-2 text-center text-xs font-bold transition ${mode === 'inspect' ? 'bg-sky-600 text-white dark:bg-amber-400 dark:text-slate-950 shadow-md' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                    className={`flex-1 rounded-lg py-1.5 text-center text-[11px] font-bold transition ${mode === 'inspect' ? 'bg-sky-600 text-white dark:bg-amber-400 dark:text-slate-950 shadow-md' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
                     onClick={() => setMode('inspect')}
                   >
                     Inspect
@@ -508,7 +510,7 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
                   <button
                     disabled={disabled}
                     aria-pressed={mode === 'route'}
-                    className={`flex-1 rounded-lg py-2 text-center text-xs font-bold transition ${mode === 'route' ? 'bg-sky-600 text-white dark:bg-amber-400 dark:text-slate-950 shadow-md' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                    className={`flex-1 rounded-lg py-1.5 text-center text-[11px] font-bold transition ${mode === 'route' ? 'bg-sky-600 text-white dark:bg-amber-400 dark:text-slate-950 shadow-md' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
                     onClick={() => setMode('route')}
                   >
                     Map Pin
@@ -516,20 +518,49 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
                   <button
                     disabled={disabled}
                     aria-pressed={mode === 'route-address'}
-                    className={`flex-1 rounded-lg py-2 text-center text-xs font-bold transition ${mode === 'route-address' ? 'bg-sky-600 text-white dark:bg-amber-400 dark:text-slate-950 shadow-md' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                    className={`flex-1 rounded-lg py-1.5 text-center text-[11px] font-bold transition ${mode === 'route-address' ? 'bg-sky-600 text-white dark:bg-amber-400 dark:text-slate-950 shadow-md' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
                     onClick={() => setMode('route-address')}
                   >
                     Address
                   </button>
+                  <button
+                    disabled={disabled}
+                    aria-pressed={mode === 'commute'}
+                    className={`flex-1 rounded-lg py-1.5 text-center text-[11px] font-bold transition ${mode === 'commute' ? 'bg-sky-600 text-white dark:bg-amber-400 dark:text-slate-950 shadow-md' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                    onClick={() => setMode('commute')}
+                  >
+                    Commute
+                  </button>
                 </div>
 
-                <PanelCaption>
-                  {mode === 'inspect'
-                    ? 'Click any point on the map for local flood index (FSI).'
-                    : mode === 'route'
-                    ? (!start ? '1. Click map for start point.' : !end ? '2. Click map for destination.' : 'Points connected via road network.')
-                    : 'Search Mumbai locations to compute flood-aware route.'}
-                </PanelCaption>
+                {mode !== 'commute' && (
+                  <PanelCaption>
+                    {mode === 'inspect'
+                      ? 'Click any point on the map for local flood index (FSI).'
+                      : mode === 'route'
+                      ? (!start ? '1. Click map for start point.' : !end ? '2. Click map for destination.' : 'Points connected via road network.')
+                      : 'Search Mumbai locations to compute flood-aware route.'}
+                  </PanelCaption>
+                )}
+
+                {mode === 'commute' && (
+                  <CommuteMonitor
+                    event={event}
+                    selectedMinutes={selectedMinutes}
+                    rainfallSource={rainfallSource}
+                    intervalReady={intervalReady}
+                    onApplyRouteToMap={(s, e, routeRes) => {
+                      setPoints([s, e])
+                      if (routeRes) setRoutes(routeRes)
+                      setRouteStatus('')
+                    }}
+                    onClearMapRoute={() => {
+                      setPoints([])
+                      setRoutes(null)
+                      setRouteStatus('')
+                    }}
+                  />
+                )}
 
                 {mode === 'route-address' && (
                   <AddressRoutePanel
@@ -551,7 +582,7 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
                 {mode === 'route' && start && (
                   <button
                     type="button"
-                    className="hud-button mt-2.5 h-8 w-full text-xs text-rose-300"
+                    className="hud-button mt-2.5 h-8 w-full text-xs text-rose-600 hover:text-rose-700 dark:text-rose-300 dark:hover:text-rose-200"
                     onClick={() => { setPoints([]); setRoutes(null); setRouteStatus('') }}
                   >
                     Clear Points
@@ -649,7 +680,7 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
         <button
           type="button"
           aria-pressed={mobileTab === 'routes'}
-          className={`flex flex-col items-center gap-1 px-3 py-1.5 rounded-xl text-[10px] font-semibold transition ${mobileTab === 'routes' ? 'text-[var(--cyan-primary)] bg-[var(--cyan-primary)]/20 shadow-sm' : 'text-[var(--text-secondary)]'}`}
+          className={`flex flex-col items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-semibold transition ${mobileTab === 'routes' ? 'text-[var(--cyan-primary)] bg-[var(--cyan-primary)]/20 shadow-sm' : 'text-[var(--text-secondary)]'}`}
           onClick={() => {
             setMobileTab(current => current === 'routes' ? null : 'routes')
             if (mode === 'inspect') setMode('route-address')
@@ -661,8 +692,18 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
 
         <button
           type="button"
+          aria-pressed={mobileTab === 'commute'}
+          className={`flex flex-col items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-semibold transition ${mobileTab === 'commute' ? 'text-[var(--gold-light)] bg-[var(--gold-primary)]/20 shadow-sm' : 'text-[var(--text-secondary)]'}`}
+          onClick={() => setMobileTab(current => current === 'commute' ? null : 'commute')}
+        >
+          <Briefcase size={18} />
+          <span>Commute</span>
+        </button>
+
+        <button
+          type="button"
           aria-pressed={mobileTab === 'legend'}
-          className={`flex flex-col items-center gap-1 px-3 py-1.5 rounded-xl text-[10px] font-semibold transition ${mobileTab === 'legend' ? 'text-[var(--gold-light)] bg-[var(--gold-primary)]/20 shadow-sm' : 'text-[var(--text-secondary)]'}`}
+          className={`flex flex-col items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-semibold transition ${mobileTab === 'legend' ? 'text-[var(--gold-light)] bg-[var(--gold-primary)]/20 shadow-sm' : 'text-[var(--text-secondary)]'}`}
           onClick={() => setMobileTab(current => current === 'legend' ? null : 'legend')}
         >
           <Layers size={18} />
@@ -711,6 +752,7 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
                   <h3 className="font-[family-name:var(--font-hud)] text-xs font-bold uppercase tracking-wider text-[var(--text-heading)]">
                     {mobileTab === 'events' && '📅 Rainfall Events & Intervals'}
                     {mobileTab === 'routes' && '🧭 Safe Flood-Aware Routing'}
+                    {mobileTab === 'commute' && '💼 Daily Commute Risk Monitor'}
                     {mobileTab === 'legend' && '📊 Layers & Susceptibility Scale'}
                   </h3>
                 </div>
@@ -874,6 +916,27 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
                       </Panel>}
                     </div>}
                   </div>
+                )}
+
+                {/* COMMUTE TAB CONTENT ON MOBILE */}
+                {mobileTab === 'commute' && (
+                  <CommuteMonitor
+                    event={event}
+                    selectedMinutes={selectedMinutes}
+                    rainfallSource={rainfallSource}
+                    intervalReady={intervalReady}
+                    onApplyRouteToMap={(s, e, routeRes) => {
+                      setPoints([s, e])
+                      if (routeRes) setRoutes(routeRes)
+                      setRouteStatus('')
+                    }}
+                    onClearMapRoute={() => {
+                      setPoints([])
+                      setRoutes(null)
+                      setRouteStatus('')
+                    }}
+                    onCloseSheet={() => setMobileTab(null)}
+                  />
                 )}
 
                 {/* LEGEND TAB CONTENT */}

@@ -34,4 +34,4 @@ export interface RouteResult {
   distanceKm: number
   cost: number
 }
-export type MapMode = 'inspect' | 'route' | 'route-address'
+export type MapMode = 'inspect' | 'route' | 'route-address' | 'commute'

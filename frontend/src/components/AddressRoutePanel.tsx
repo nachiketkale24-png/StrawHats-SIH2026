@@ -298,13 +298,13 @@ export default function AddressRoutePanel({ onRouteFound, onClear, disabled, rou
       {/* Messages */}
       <div role="status">
         {error && (
-          <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-2.5 text-xs text-red-300">
+          <div className="rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
             {error}
           </div>
         )}
         {routeStatus && (
-          <div className="flex items-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 p-2.5 text-xs text-cyan-300">
-            <Loader2 size={13} className="animate-spin shrink-0" />
+          <div className="flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 p-2.5 text-xs text-sky-900 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-300">
+            <Loader2 size={13} className="animate-spin shrink-0 text-sky-600 dark:text-cyan-400" />
             <span>{routeStatus}</span>
           </div>
         )}
@@ -313,7 +313,7 @@ export default function AddressRoutePanel({ onRouteFound, onClear, disabled, rou
       {hasRoute && (
         <button
           type="button"
-          className="hud-button flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border-rose-500/30 text-rose-300 hover:border-rose-500 hover:text-rose-200"
+          className="hud-button flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border-rose-200 text-rose-600 hover:border-rose-400 hover:text-rose-700 dark:border-rose-500/30 dark:text-rose-300 dark:hover:border-rose-500 dark:hover:text-rose-200"
           onClick={handleClear}
         >
           <X size={14} />
