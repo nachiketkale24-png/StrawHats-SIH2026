@@ -1,3 +1,4 @@
+import { useTheme } from '../theme/ThemeProvider'
 /**
  * Backend Connection Settings Modal.
  * Allows configuring the FastAPI server IP/URL and testing connection from Expo Go.
@@ -24,6 +25,8 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({ visible, onClose, onSuccess }: SettingsModalProps) {
+  const { colors: Colors } = useTheme()
+  const styles = makeStyles(Colors)
   const [url, setUrl] = useState(getApiBase())
   const [testing, setTesting] = useState(false)
   const [status, setStatus] = useState<{ type: 'idle' | 'success' | 'error'; message: string }>({
@@ -80,7 +83,7 @@ export function SettingsModal({ visible, onClose, onSuccess }: SettingsModalProp
           <View style={styles.header}>
             <View style={styles.titleRow}>
               <Ionicons name="server" size={18} color={Colors.gold} />
-              <Text style={styles.title}>BACKEND SERVER SETTINGS</Text>
+              <Text style={styles.title}>Backend server settings</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={18} color={Colors.textSecondary} />
@@ -153,7 +156,7 @@ export function SettingsModal({ visible, onClose, onSuccess }: SettingsModalProp
   )
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.8)',
@@ -187,10 +190,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   title: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 13,
     color: Colors.gold,
-    letterSpacing: 0.5,
+    letterSpacing: 0,
   },
   closeBtn: {
     padding: 4,
@@ -272,7 +275,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   saveBtnText: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 12,
     color: '#000',
     fontWeight: '700',

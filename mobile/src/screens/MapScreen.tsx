@@ -1,7 +1,6 @@
+import { useTheme } from '../theme/ThemeProvider'
 /**
- * Main Map Screen for Mumbai Flood Susceptibility Expo Go App.
- * Full Safe Area View, premium glassmorphic HUD styling, CARTO Dark Matter vector tiles,
- * safe route plotting, coordinate inspection, and interactive bottom sheets.
+ * Native Google Maps screen with window-aware flood layers and bottom panels.
  */
 import React, { useState, useRef, useEffect } from 'react'
 import {
@@ -28,7 +27,8 @@ import { InspectSheet } from '../components/InspectSheet'
 import StatusToast from '../components/StatusToast'
 import ModeGuide from '../components/ModeGuide'
 import { SettingsModal } from '../components/SettingsModal'
-import { InteractiveMap } from '../components/InteractiveMap'
+import MapView from 'react-native-maps'
+import { HOME, InteractiveMap } from '../components/InteractiveMap'
 
 import { Colors, Fonts } from '../theme'
 import type { RoutePoint } from '../types/flood'
@@ -37,11 +37,21 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window')
 const SHEET_HEIGHT = Math.min(SCREEN_HEIGHT * 0.58, 480)
 
 export default function MapScreen() {
+  const { colors: Colors } = useTheme()
+  const styles = makeStyles(Colors)
   const insets = useSafeAreaInsets()
-  const mapRef = useRef<any>(null)
+  const mapRef = useRef<MapView>(null)
+  const { satellite, setSatellite } = useTheme()
+  const [floodVisible, setFloodVisible] = useState(true)
+  const [traffic, setTraffic] = useState(false)
+  const [roadsVisible, setRoadsVisible] = useState(false)
+  const [mapStatus, setMapStatus] = useState('')
+  const [cardsHidden, setCardsHidden] = useState(false)
 
   // Data hook
   const {
+    source, setSource, tolerance, setTolerance, drainageMode, setDrainageMode, drainage, drainageError, refresh,
+    setApiError,
     events,
     event,
     windows,
@@ -71,7 +81,8 @@ export default function MapScreen() {
 
   // Local UI State - default is full map only (no sheet open)
   const [activeTab, setActiveTab] = useState<'events' | 'routes' | 'legend' | 'inspect' | null>(null)
-  const [mapType, setMapType] = useState<'standard' | 'satellite'>('standard')
+  const mapType = satellite ? 'satellite' : 'standard'
+  const setMapType = (value: 'standard'|'satellite') => setSatellite(value === 'satellite')
   const [settingsVisible, setSettingsVisible] = useState(false)
 
   // Inspect State
@@ -132,35 +143,41 @@ export default function MapScreen() {
   const handleMapPress = async ({ latitude, longitude }: { latitude: number; longitude: number }) => {
     if (mode === 'inspect') {
       setInspectCoord({ lat: latitude, lng: longitude })
-      setInspecting(true)
-      setInspectFsi(null)
-      setActiveTab('inspect')
-
-      const result = await inspectPoint(longitude, latitude)
-      setInspecting(false)
-      if (result && result.fsi !== null) {
-        setInspectFsi(result.fsi)
-      } else {
-        setInspectFsi(null)
-      }
+      if (!cardsHidden) setActiveTab('inspect')
     } else if (mode === 'route') {
       addPoint({ lat: latitude, lng: longitude })
       if (points.length === 1) {
         // Point B picked -> switch back to Routes tab to view comparison
-        setActiveTab('routes')
+        if (!cardsHidden) setActiveTab('routes')
       }
     }
   }
 
-  // Camera Actions
-  const handleRecenter = () => {
-    mapRef.current?.postMessage?.(JSON.stringify({ type: 'RECENTER' }))
-  }
-
-  const handleZoom = (delta: number) => {
-    mapRef.current?.postMessage?.(JSON.stringify({ type: delta > 0 ? 'ZOOM_IN' : 'ZOOM_OUT' }))
-  }
-
+  useEffect(() => {
+    let active = true
+    setInspectFsi(null)
+    if (!inspectCoord) { setInspecting(false); return }
+    setInspecting(true)
+    inspectPoint(inspectCoord.lng, inspectCoord.lat).then(result => {
+      if (active) { setInspectFsi(result?.fsi ?? null); setInspecting(false) }
+    })
+    return () => { active = false }
+  }, [inspectCoord, inspectPoint])
+  useEffect(() => {
+    const line = routes?.tolerance_route?.coordinates ?? routes?.suggested_route?.coordinates ?? routes?.normal_route.coordinates
+    if (line?.length) mapRef.current?.fitToCoordinates(line.map(([longitude, latitude]) => ({ latitude, longitude })), { edgePadding: { top: 90, bottom: 120, left: 40, right: 40 }, animated: true })
+  }, [routes])
+  // A suggested route is a higher-risk preview, accepted only by the user.
+  useEffect(() => {
+    if (!routes?.tolerance_route && routes?.suggested_route) {
+      const suggestion = routes.suggested_route
+      Alert.alert('A route is available at higher risk', `No connected route meets ${tolerance} tolerance. ${suggestion.risk_tolerance} tolerance offers ${(suggestion.length_m / 1000).toFixed(2)} km with maximum FSI ${suggestion.max_risk.toFixed(3)}. The amber route is a preview.`, [
+        { text: 'Keep tolerance', style: 'cancel' },
+        { text: `Use ${suggestion.risk_tolerance}`, onPress: () => setTolerance(suggestion.risk_tolerance) },
+      ])
+    }
+  }, [routes])
+  const handleRecenter = () => mapRef.current?.animateToRegion(HOME, 500)
   const handleMyLocation = async () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync()
@@ -169,14 +186,7 @@ export default function MapScreen() {
         return
       }
       const loc = await Location.getCurrentPositionAsync({})
-      mapRef.current?.postMessage?.(
-        JSON.stringify({
-          type: 'FLY_TO',
-          lat: loc.coords.latitude,
-          lng: loc.coords.longitude,
-          zoom: 14,
-        })
-      )
+      mapRef.current?.animateToRegion({ latitude: loc.coords.latitude, longitude: loc.coords.longitude, latitudeDelta: .025, longitudeDelta: .025 }, 500)
     } catch {
       Alert.alert('Location Error', 'Could not obtain current GPS location.')
     }
@@ -194,8 +204,11 @@ export default function MapScreen() {
       {/* Main Map View Container */}
       <View style={styles.mapWrapper}>
         <InteractiveMap
+          ref={mapRef}
+          source={source} refresh={refresh} floodVisible={floodVisible} traffic={traffic} roadsVisible={roadsVisible}
+          drainage={drainage} drainageMode={drainageMode} onStatus={setMapStatus}
           mapType={mapType}
-          event={event}
+          event={intervalReady ? event : ''}
           minutes={selectedMinutes}
           start={start ?? null}
           end={end ?? null}
@@ -205,7 +218,7 @@ export default function MapScreen() {
         />
 
         {/* Floating Top Mode Guide Pill */}
-        <ModeGuide
+        {!cardsHidden && <ModeGuide
           mode={mode}
           pointCount={points.length}
           onClearMode={() => {
@@ -214,8 +227,9 @@ export default function MapScreen() {
           }}
         />
 
+        }
         {/* Floating Map Action Controls (Right side) */}
-        <View style={styles.mapControls}>
+        {!cardsHidden && <View style={styles.mapControls}>
           <TouchableOpacity
             style={styles.controlBtn}
             onPress={handleMyLocation}
@@ -244,29 +258,14 @@ export default function MapScreen() {
             />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.controlBtn}
-            onPress={() => handleZoom(1)}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="add" size={18} color={Colors.textPrimary} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.controlBtn}
-            onPress={() => handleZoom(-1)}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="remove" size={18} color={Colors.textPrimary} />
-          </TouchableOpacity>
-        </View>
+        </View>}
 
         {/* Floating Status / Error Banner */}
         <StatusToast
           loading={eventsLoading}
           error={apiError}
-          routeStatus={routeStatus}
-          onDismissError={() => {}}
+          routeStatus={routeStatus || mapStatus}
+          onDismissError={() => setApiError('')}
         />
 
         {/* Sliding Bottom Sheet Container with PanResponder */}
@@ -279,6 +278,7 @@ export default function MapScreen() {
           ]}
         >
           {/* Sheet Handle Bar - Swipe / Drag down to close */}
+          <TouchableOpacity accessibilityLabel="Close panel" onPress={() => setActiveTab(null)} style={{ position: 'absolute', right: 14, top: 6, zIndex: 2, padding: 6 }}><Ionicons name="chevron-down" size={20} color={Colors.textSecondary} /></TouchableOpacity>
           <View {...panResponder.panHandlers} style={styles.sheetHandleWrap}>
             <View style={styles.sheetHandle} />
           </View>
@@ -287,6 +287,7 @@ export default function MapScreen() {
           <View style={styles.sheetBody}>
             {activeTab === 'events' && (
               <EventsSheet
+                source={source} onSource={setSource}
                 events={events}
                 event={event}
                 eventsLoading={eventsLoading}
@@ -305,6 +306,7 @@ export default function MapScreen() {
 
             {activeTab === 'routes' && (
               <RoutesSheet
+                tolerance={tolerance} onTolerance={setTolerance}
                 routeMode={mode}
                 onSelectRouteMode={(m) => setMode(m)}
                 routeStart={start ?? null}
@@ -320,6 +322,9 @@ export default function MapScreen() {
 
             {activeTab === 'legend' && (
               <LegendSheet
+                floodVisible={floodVisible} onFlood={setFloodVisible} traffic={traffic} onTraffic={setTraffic}
+                roadsVisible={roadsVisible} onRoads={setRoadsVisible} drainage={drainage} drainageError={drainageError}
+                drainageMode={drainageMode} onDrainageMode={setDrainageMode}
                 mapType={mapType}
                 onToggleMapType={() =>
                   setMapType(mapType === 'standard' ? 'satellite' : 'standard')
@@ -344,7 +349,8 @@ export default function MapScreen() {
       </View>
 
       {/* Bottom Tab Bar Dock — wrapped to extend dark bg behind Android gesture bar */}
-      <View style={styles.bottomDock}>
+      <TouchableOpacity onPress={() => { setCardsHidden(value => !value); setActiveTab(null) }} style={{ position: 'absolute', left: 12, bottom: insets.bottom + 80, zIndex: 40, padding: 10, borderRadius: 9, backgroundColor: Colors.bgPanel }}><Text style={{ color: Colors.textPrimary }}>{cardsHidden ? 'Show panels' : 'Hide all panels'}</Text></TouchableOpacity>
+      {!cardsHidden && <View style={styles.bottomDock}>
         <BottomTabBar
           activeTab={activeTab}
           onSelectTab={(tab) => {
@@ -357,7 +363,7 @@ export default function MapScreen() {
             }
           }}
         />
-      </View>
+      </View>}
 
       {/* Backend IP Settings Modal */}
       <SettingsModal
@@ -369,7 +375,7 @@ export default function MapScreen() {
   )
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.bgVoid,
@@ -393,7 +399,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 10,
-    backgroundColor: 'rgba(12, 14, 26, 0.92)',
+    backgroundColor: Colors.bgPanel,
     borderWidth: 1,
     borderColor: Colors.borderPrimary,
     alignItems: 'center',
@@ -411,7 +417,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: 'rgba(12, 14, 26, 0.92)',
+    backgroundColor: Colors.bgPanel,
     borderWidth: 1,
     borderColor: 'rgba(212, 175, 55, 0.35)',
     borderRadius: 16,
@@ -425,7 +431,7 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   collapsePillText: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 10,
     color: Colors.goldLight,
   },
@@ -435,7 +441,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     height: SHEET_HEIGHT,
-    backgroundColor: '#04040a',
+    backgroundColor: Colors.bgVoid,
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
     borderTopWidth: 1,
@@ -465,6 +471,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   bottomDock: {
-    backgroundColor: '#04040a',
+    backgroundColor: Colors.bgVoid,
   },
 })

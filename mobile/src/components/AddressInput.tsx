@@ -1,3 +1,4 @@
+import { useTheme } from '../theme/ThemeProvider'
 /**
  * Reusable Address Input component with instant Mumbai landmark & Nominatim autocomplete suggestions.
  * Fixed zIndex and stacking context to prevent overlapping with destination box.
@@ -39,6 +40,8 @@ export function AddressInput({
   onFocusChange,
   disabled,
 }: AddressInputProps) {
+  const { colors: Colors } = useTheme()
+  const styles = makeStyles(Colors)
   const [suggestions, setSuggestions] = useState<GeocodeResult[]>([])
   const [isFocused, setIsFocused] = useState(false)
   const [loadingSuggestions, setLoadingSuggestions] = useState(false)
@@ -210,7 +213,7 @@ export function AddressInput({
   )
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet.create({
   container: {
     position: 'relative',
     zIndex: 10,
@@ -253,7 +256,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 229, 255, 0.15)',
   },
   badgeText: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 11,
     fontWeight: '700',
   },
@@ -278,7 +281,7 @@ const styles = StyleSheet.create({
     top: 48,
     left: 0,
     right: 0,
-    backgroundColor: '#060710', // 100% solid opaque dark panel
+    backgroundColor: Colors.bgPanel, // 100% solid opaque dark panel
     borderWidth: 1,
     borderColor: Colors.borderPrimary,
     borderRadius: 12,
@@ -300,7 +303,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(212, 175, 55, 0.12)',
-    backgroundColor: '#060710',
+    backgroundColor: Colors.bgPanel,
   },
   suggestionItemLast: {
     borderBottomWidth: 0,
@@ -309,7 +312,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#16192b',
+    backgroundColor: Colors.bgSecondary,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
@@ -318,7 +321,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   suggestionTitle: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 12,
     color: Colors.textPrimary,
     marginBottom: 2,

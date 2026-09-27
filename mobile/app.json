@@ -26,7 +26,8 @@
       "navigationBar": {
         "barStyle": "light-content",
         "backgroundColor": "#04040a"
-      }
+      },
+      "package": "com.anonymous.mobile"
     },
     "web": {
       "favicon": "./assets/favicon.png"
