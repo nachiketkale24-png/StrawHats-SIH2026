@@ -1,3 +1,4 @@
+import { useTheme } from '../theme/ThemeProvider'
 /**
  * Inspect bottom sheet panel for examining point-specific Flood Susceptibility Index (FSI).
  * Displays coordinates, calculated FSI value, risk rating, and advice.
@@ -30,11 +31,13 @@ export function InspectSheet({
   onClearInspect,
   onDismiss,
 }: InspectSheetProps) {
+  const { colors: Colors } = useTheme()
+  const styles = makeStyles(Colors)
   const getFsiCategory = (fsi: number) => {
-    if (fsi < 0.25) return { label: 'LOW RISK', color: FsiColors.low, advice: 'Normal dry conditions. Safe for all vehicle types.' }
-    if (fsi < 0.50) return { label: 'MODERATE RISK', color: FsiColors.medium, advice: 'Potential minor water stagnation. Drive carefully.' }
-    if (fsi < 0.75) return { label: 'HIGH RISK', color: FsiColors.high, advice: 'Significant waterlogging likely. Low-clearance vehicles avoid.' }
-    return { label: 'CRITICAL / SEVERE', color: FsiColors.severe, advice: 'Major flooding event. Impassable road corridor. Seek high ground.' }
+    if (fsi < 0.25) return { label: 'LOW RISK', color: FsiColors.low, advice: 'Low susceptibility in the selected rainfall window.' }
+    if (fsi < 0.50) return { label: 'MODERATE RISK', color: FsiColors.medium, advice: 'Medium susceptibility in the selected rainfall window.' }
+    if (fsi < 0.75) return { label: 'HIGH RISK', color: FsiColors.high, advice: 'High susceptibility in the selected rainfall window.' }
+    return { label: 'CRITICAL / SEVERE', color: FsiColors.severe, advice: 'Severe susceptibility in the selected rainfall window.' }
   }
 
   const category = inspectFsi !== null ? getFsiCategory(inspectFsi) : null
@@ -50,9 +53,9 @@ export function InspectSheet({
           <View style={styles.crosshairCircle}>
             <MaterialCommunityIcons name="crosshairs-gps" size={32} color={Colors.gold} />
           </View>
-          <Text style={styles.emptyTitle}>TAP ANYWHERE ON MAP</Text>
+          <Text style={styles.emptyTitle}>Tap anywhere on map</Text>
           <Text style={styles.emptyDesc}>
-            Switch to the map view and tap any coordinate in Mumbai to query real-time Flood Susceptibility Index (FSI) from our ML hydrological model.
+            Switch to the map view and tap any coordinate in Mumbai to query Flood Susceptibility Index (FSI) for the selected rainfall source and window.
           </Text>
           <TouchableOpacity style={styles.tapMapBtn} onPress={onDismiss}>
             <Text style={styles.tapMapBtnText}>Go to Map</Text>
@@ -113,7 +116,7 @@ export function InspectSheet({
   )
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.bgVoid,
@@ -138,10 +141,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   emptyTitle: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 14,
     color: Colors.gold,
-    letterSpacing: 0.8,
+    letterSpacing: 0,
     marginBottom: 8,
   },
   emptyDesc: {
@@ -163,9 +166,9 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   tapMapBtnText: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 12,
-    color: '#000',
+    color: Colors.onAccent,
     fontWeight: '700',
   },
   resultContainer: {
@@ -203,7 +206,7 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
   },
   loadingText: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 11,
     color: Colors.gold,
   },
@@ -227,11 +230,11 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   fsiBadgeText: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 11,
   },
   fsiPercent: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 16,
     color: Colors.textPrimary,
   },

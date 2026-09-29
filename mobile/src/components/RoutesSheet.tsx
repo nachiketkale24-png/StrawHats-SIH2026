@@ -1,3 +1,4 @@
+import { useTheme } from '../theme/ThemeProvider'
 /**
  * Routes bottom sheet panel matching the web frontend's Routes tab.
  * Includes address lookup, GPS location, preset destinations, pick on map toggle,
@@ -21,6 +22,8 @@ import type { RoutePoint, MapMode } from '../types/flood'
 import { Colors, Fonts } from '../theme'
 
 interface RoutesSheetProps {
+  tolerance: import("../api/floodApi").RiskTolerance
+  onTolerance: (value: import("../api/floodApi").RiskTolerance) => void
   routeMode: MapMode
   onSelectRouteMode: (mode: MapMode) => void
   routeStart: RoutePoint | null
@@ -43,6 +46,7 @@ const MUMBAI_PRESETS = [
 ]
 
 export function RoutesSheet({
+  tolerance, onTolerance,
   routeMode,
   onSelectRouteMode,
   routeStart,
@@ -54,6 +58,8 @@ export function RoutesSheet({
   onClearRoute,
   onDismiss,
 }: RoutesSheetProps) {
+  const { colors: Colors } = useTheme()
+  const styles = makeStyles(Colors)
   const [startText, setStartText] = useState('')
   const [endText, setEndText] = useState('')
   const [isFocusedA, setIsFocusedA] = useState(false)
@@ -147,6 +153,9 @@ export function RoutesSheet({
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="always"
     >
+      <Text style={{ color: Colors.textHeading, fontSize: 15, fontWeight: '600', marginBottom: 10 }}>Flood risk tolerance</Text>
+      <View style={{ flexDirection: 'row', gap: 6, marginBottom: 18 }}>{(['low','medium','high','severe'] as const).map(value => <TouchableOpacity key={value} onPress={() => onTolerance(value)} style={{ flex: 1, paddingVertical: 11, alignItems: 'center', borderWidth: 1, borderColor: Colors.borderPrimary, borderRadius: 9, backgroundColor: tolerance === value ? Colors.gold : Colors.bgSecondary }}><Text style={{ color: tolerance === value ? Colors.bgVoid : Colors.textPrimary, textTransform: 'capitalize' }}>{value}</Text></TouchableOpacity>)}</View>
+
       {/* Mode Segmented Control */}
       <View style={styles.segmentContainer}>
         <TouchableOpacity
@@ -271,7 +280,7 @@ export function RoutesSheet({
           <View style={[styles.presetsSection, { zIndex: 1, elevation: 1 }]}>
             <View style={styles.presetsHeader}>
               <Ionicons name="sparkles" size={12} color={Colors.gold} />
-              <Text style={styles.presetsTitle}>QUICK DESTINATIONS</Text>
+              <Text style={styles.presetsTitle}>Quick destinations</Text>
             </View>
             <View style={styles.presetsGrid}>
               {MUMBAI_PRESETS.map((p) => (
@@ -312,84 +321,29 @@ export function RoutesSheet({
             ) : (
               <View style={styles.btnRow}>
                 <Ionicons name="shield-checkmark" size={15} color="#000" />
-                <Text style={styles.computeBtnText}>CALCULATE SAFE ROUTE</Text>
+                <Text style={styles.computeBtnText}>Calculate safe route</Text>
               </View>
             )}
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Route Results Comparison Card */}
-      {routeComparison && (
-        <View style={styles.comparisonCard}>
-          <View style={styles.comparisonHeader}>
-            <View style={styles.badgeRow}>
-              <View style={styles.safeTag}>
-                <Ionicons name="shield-checkmark" size={12} color={Colors.cyan} />
-                <Text style={styles.safeTagText}>FLOOD AVOIDANCE ROUTE</Text>
-              </View>
-            </View>
-            <TouchableOpacity onPress={onDismiss} style={styles.viewMapPill}>
-              <Text style={styles.viewMapText}>View on Map</Text>
-              <Ionicons name="arrow-forward" size={12} color={Colors.gold} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Metrics Grid */}
-          <View style={styles.metricsGrid}>
-            <View style={styles.metricCol}>
-              <Text style={styles.metricLabel}>SAFE DISTANCE</Text>
-              <Text style={styles.metricValCyan}>
-                {(routeComparison.flood_aware_route.length_m / 1000).toFixed(1)} km
-              </Text>
-            </View>
-
-            <View style={styles.metricCol}>
-              <Text style={styles.metricLabel}>AVG FLOOD RISK</Text>
-              <Text style={styles.metricVal}>
-                {(routeComparison.flood_aware_route.avg_risk * 100).toFixed(0)}%
-              </Text>
-            </View>
-
-            <View style={styles.metricCol}>
-              <Text style={styles.metricLabel}>RISK REDUCTION</Text>
-              <Text style={styles.metricValGreen}>
-                {Math.max(
-                  0,
-                  Math.round(
-                    ((routeComparison.normal_route.avg_risk - routeComparison.flood_aware_route.avg_risk) /
-                      (routeComparison.normal_route.avg_risk || 1)) *
-                      100
-                  )
-                )}
-                %
-              </Text>
-            </View>
-          </View>
-
-          {/* Comparison Bar */}
-          <View style={styles.comparisonRow}>
-            <View style={styles.compBarItem}>
-              <View style={[styles.dot, { backgroundColor: '#888' }]} />
-              <Text style={styles.compSub}>
-                Shortest: {(routeComparison.normal_route.length_m / 1000).toFixed(1)} km (Risk:{' '}
-                {(routeComparison.normal_route.avg_risk * 100).toFixed(0)}%)
-              </Text>
-            </View>
-          </View>
-
-          {/* Clear Route Button */}
-          <TouchableOpacity style={styles.clearBtn} onPress={handleClear}>
-            <Ionicons name="trash-outline" size={14} color="#f87171" />
-            <Text style={styles.clearBtnText}>Clear Current Route</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      {routeComparison && <View style={styles.comparisonCard}>
+        <Text style={{ color: Colors.textPrimary, fontWeight: '600', fontSize: 15 }}>Fastest route (gray) · {(routeComparison.normal_route.length_m / 1000).toFixed(2)} km</Text>
+        <Text style={{ color: Colors.textSecondary, marginTop: 8 }}>Maximum FSI {routeComparison.normal_route.max_risk.toFixed(3)} · Average FSI {routeComparison.normal_route.avg_risk.toFixed(3)}</Text>
+        <Text style={{ color: Colors.cyan, fontWeight: '600', fontSize: 15, marginTop: 18 }}>FloodSafe (cyan) · {tolerance} tolerance</Text>
+        <Text style={{ color: Colors.textPrimary, marginTop: 8 }}>{routeComparison.tolerance_route ? `${routeComparison.tolerance_distance_km?.toFixed(2)} km · Maximum FSI ${routeComparison.max_risk_on_route?.toFixed(3)}` : 'No connected route meets this tolerance.'}</Text>
+        {routeComparison.tolerance_route && <Text style={{ color: Colors.textSecondary, marginTop: 8 }}>High/severe segments: {routeComparison.high_severe_segment_count} · Distance difference: {((routeComparison.tolerance_distance_km ?? 0) - routeComparison.normal_route.length_m / 1000).toFixed(2)} km</Text>}
+        {routeComparison.warning && <Text style={{ color: Colors.textSecondary, marginTop: 12 }}>{routeComparison.warning}</Text>}
+        {routeComparison.suggested_route && <TouchableOpacity onPress={() => onTolerance(routeComparison.suggested_route!.risk_tolerance)} style={{ padding: 12, borderWidth: 1, borderColor: Colors.gold, borderRadius: 9, marginTop: 14 }}><Text style={{ color: Colors.gold }}>Use {routeComparison.suggested_route.risk_tolerance} tolerance · {(routeComparison.suggested_route.length_m / 1000).toFixed(2)} km</Text></TouchableOpacity>}
+        <TouchableOpacity onPress={onDismiss} style={styles.viewMapPill}><Text style={styles.viewMapText}>View on map</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.clearBtn} onPress={handleClear}><Text style={styles.clearBtnText}>Clear route</Text></TouchableOpacity>
+      </View>}
     </ScrollView>
   )
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.bgVoid,
@@ -423,10 +377,10 @@ const styles = StyleSheet.create({
     borderColor: Colors.borderPrimary,
   },
   segmentText: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 11,
     color: Colors.textSecondary,
-    textTransform: 'uppercase',
+    textTransform: 'none',
   },
   segmentTextActive: {
     color: Colors.gold,
@@ -449,7 +403,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   pickGuideTitle: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 12,
     color: Colors.cyan,
     marginBottom: 4,
@@ -500,10 +454,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   presetsTitle: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 10,
     color: Colors.textSecondary,
-    letterSpacing: 0.8,
+    letterSpacing: 0,
   },
   presetsGrid: {
     flexDirection: 'row',
@@ -537,7 +491,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: Fonts.body,
     fontSize: 11,
-    color: '#f87171',
+    color: Colors.textError,
   },
   computeBtn: {
     backgroundColor: Colors.gold,
@@ -561,11 +515,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   computeBtnText: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 12,
-    color: '#04040a',
+    color: Colors.onAccent,
     fontWeight: '800',
-    letterSpacing: 0.5,
+    letterSpacing: 0,
   },
   comparisonCard: {
     marginTop: 18,
@@ -597,7 +551,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   safeTagText: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 10,
     color: Colors.cyan,
   },
@@ -608,7 +562,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   viewMapText: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 11,
     color: Colors.gold,
   },
@@ -630,17 +584,17 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   metricVal: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 14,
     color: Colors.textPrimary,
   },
   metricValCyan: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 14,
     color: Colors.cyan,
   },
   metricValGreen: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 14,
     color: '#34d399',
   },

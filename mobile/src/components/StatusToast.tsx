@@ -1,3 +1,4 @@
+import { useTheme } from '../theme/ThemeProvider'
 /**
  * Floating status toast matching the web's loading/error banner.
  */
@@ -22,6 +23,8 @@ export default function StatusToast({
   message,
   isError,
 }: Props) {
+  const { colors: Colors } = useTheme()
+  const styles = makeStyles(Colors)
   const displayError = error || (isError ? message : null)
   const displayLoading = loading || (routeStatus && !error)
   const displayMsg = displayError || routeStatus || message
@@ -32,7 +35,7 @@ export default function StatusToast({
     <View style={styles.wrapper} pointerEvents="none">
       <View style={[styles.toast, displayError ? styles.toastError : styles.toastNormal]}>
         {displayError ? (
-          <Ionicons name="alert-circle" size={16} color="#f87171" />
+          <Ionicons name="alert-circle" size={16} color={Colors.textError} />
         ) : displayLoading ? (
           <ActivityIndicator size="small" color={Colors.cyan} />
         ) : (
@@ -46,7 +49,7 @@ export default function StatusToast({
   )
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet.create({
   wrapper: {
     position: 'absolute',
     top: 10,
@@ -71,12 +74,12 @@ const styles = StyleSheet.create({
     maxWidth: '92%',
   },
   toastNormal: {
-    backgroundColor: 'rgba(12, 14, 26, 0.95)',
+    backgroundColor: Colors.bgPanel,
     borderColor: Colors.borderPrimary,
   },
   toastError: {
-    backgroundColor: 'rgba(30, 10, 15, 0.95)',
-    borderColor: 'rgba(239, 68, 68, 0.4)',
+    backgroundColor: Colors.errorBackground,
+    borderColor: Colors.errorBorder,
   },
   pingDot: {
     height: 8,
@@ -93,6 +96,6 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
   },
   textError: {
-    color: '#fca5a5',
+    color: Colors.textError,
   },
 })

@@ -1,6 +1,23 @@
-// MapLibre image textures are linear in Web Mercator, not in latitude.
+// Map image textures are linear in Web Mercator, not in latitude.
 // Sample each target pixel center back into the source geographic raster.
 export type RasterBounds = [number, number, number, number]
+
+// Feather the outer data extent only. Interior gaps must not weaken nearby risk.
+export function featherRasterMask(valid: Uint8Array, width: number, height: number, radius = 3) {
+  let left = width, right = -1, top = height, bottom = -1
+  for (let i = 0; i < valid.length; i++) {
+    if (!valid[i]) continue
+    const x = i % width, y = Math.floor(i / width)
+    left = Math.min(left, x); right = Math.max(right, x)
+    top = Math.min(top, y); bottom = Math.max(bottom, y)
+  }
+  return Float32Array.from(valid, (available, i) => {
+    if (!available) return 0
+    const x = i % width, y = Math.floor(i / width)
+    const t = Math.min(radius, x - left + 1, right - x + 1, y - top + 1, bottom - y + 1) / radius
+    return t * t * (3 - 2 * t)
+  })
+}
 const radians = Math.PI / 180
 export function mercatorY(latitude: number) {
   return Math.log(Math.tan(Math.PI / 4 + latitude * radians / 2))

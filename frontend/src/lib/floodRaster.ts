@@ -1,36 +1,10 @@
-import type { GeoJSONSource, Map } from 'maplibre-gl'
 import { fromArrayBuffer } from 'geotiff'
-import { apiRequest, windowQuery } from './floodApi'
-import type { RouteComparison } from './floodApi'
-import type { RoutePoint } from '../types/flood'
-import { projectRaster } from './rasterProjection'
+import { apiRequest, type RainfallSource, windowQuery } from './floodApi'
+import { projectRaster, featherRasterMask } from './rasterProjection'
 import type { RasterBounds } from './rasterProjection'
+import { cachedDisplay } from './displayCache'
 
 export const FSI_COLORS = ['#38bdf8', '#facc15', '#fb923c', '#ef4444']
-export function addEventLayers(map: Map) {
-  for (const id of ['normal-route', 'safe-route', 'route-points']) {
-    map.addSource(id, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
-  }
-  for (const [id, color, width] of [['normal-route', '#94a3b8', 7], ['safe-route', '#22d3ee', 4]] as const) {
-    map.addLayer({ id, type: 'line', source: id, paint: { 'line-color': color, 'line-width': width }, layout: { 'line-cap': 'round', 'line-join': 'round' } })
-  }
-  map.addLayer({ id: 'route-points', type: 'circle', source: 'route-points', paint: { 'circle-radius': 10, 'circle-color': '#0f172a', 'circle-stroke-color': '#22d3ee', 'circle-stroke-width': 2 } })
-  map.addLayer({ id: 'route-labels', type: 'symbol', source: 'route-points', layout: { 'text-field': ['get', 'label'], 'text-size': 12, 'text-allow-overlap': true }, paint: { 'text-color': '#ffffff' } })
-}
-export function updateEventRoutes(map: Map, points: RoutePoint[], routes: RouteComparison | null) {
-  for (const [id, route] of [['normal-route', routes?.normal_route], ['safe-route', routes?.flood_aware_route]] as const) {
-    map.getSource<GeoJSONSource>(id)?.setData({ type: 'FeatureCollection', features: route && route.coordinates.length > 1 ? [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: route.coordinates } }] : [] })
-  }
-  map.getSource<GeoJSONSource>('route-points')?.setData({ type: 'FeatureCollection', features: points.map((point, index) => ({ type: 'Feature', properties: { label: index === 0 ? 'A' : 'B' }, geometry: { type: 'Point', coordinates: [point.lng, point.lat] } })) })
-}
-export function clearEventRaster(map: Map) {
-  if (map.getLayer('event-fsi')) map.removeLayer('event-fsi')
-  if (map.getSource('event-fsi')) map.removeSource('event-fsi')
-}
-export function clearCoverageOverlay(map: Map) {
-  if (map.getLayer('station-coverage')) map.removeLayer('station-coverage')
-  if (map.getSource('station-coverage')) map.removeSource('station-coverage')
-}
 async function readAlignedRaster(path: string, signal: AbortSignal) {
   const response = await apiRequest(path, signal)
   const tiff = await fromArrayBuffer(await response.arrayBuffer())
@@ -60,34 +34,55 @@ function imageCoordinates(bounds: RasterBounds) {
   const [west, south, east, north] = bounds
   return { url: '', coordinates: [[west, north], [east, north], [east, south], [west, south]] as [[number, number], [number, number], [number, number], [number, number]] }
 }
-export async function loadEventRaster(event: string, signal: AbortSignal, minutes?: number) {
-  const { values, width, height, bounds, nodata } = await readAlignedRaster(`/flood/raster/${encodeURIComponent(event)}${windowQuery(minutes)}`, signal)
+export async function loadEventRaster(event: string, signal: AbortSignal, minutes: number | undefined, rainfallSource: RainfallSource) {
+  const key = `raster:${rainfallSource}:${event}:${minutes ?? 'daily'}`
+  return cachedDisplay(key, signal, () => renderEventRaster(event, new AbortController().signal, minutes, rainfallSource))
+}
+async function renderEventRaster(event: string, signal: AbortSignal, minutes: number | undefined, rainfallSource: RainfallSource) {
+  const [raster, landResult] = await Promise.allSettled([
+    readAlignedRaster(`/flood/raster/${encodeURIComponent(event)}${windowQuery(minutes, rainfallSource)}`, signal),
+    cachedDisplay('land-mask', signal, () => readAlignedRaster('/flood/land-mask', new AbortController().signal), Infinity),
+  ])
+  
+  if (raster.status === 'rejected') throw raster.reason
+  const { values, width, height, bounds, nodata } = raster.value
+  
+  const land = landResult.status === 'fulfilled' ? landResult.value : null
+  const hasMatchingLand = land && land.width === width && land.height === height
+  
+  const valid = Uint8Array.from(values, value => Number.isFinite(value) && value !== nodata && value >= 0 && value <= 1 ? 1 : 0)
+  const opacity = featherRasterMask(valid, width, height)
   const url = canvasFromPixels(width, height, pixels => {
     for (let i = 0; i < width * height; i++) {
       const value = Number(values[i])
       if (!Number.isFinite(value) || value === nodata || value < 0 || value > 1) continue
+      if (hasMatchingLand && land.values[i] !== 1) continue
       const color = FSI_COLORS[Math.min(3, Math.floor(value * 4))]
       pixels.data[i * 4] = parseInt(color.slice(1, 3), 16)
       pixels.data[i * 4 + 1] = parseInt(color.slice(3, 5), 16)
       pixels.data[i * 4 + 2] = parseInt(color.slice(5, 7), 16)
-      pixels.data[i * 4 + 3] = value < 0.25 ? 60 : 150
+      // Low blue needs more opacity on Google's light roadmap; keep FSI bins unchanged.
+      pixels.data[i * 4 + 3] = Math.round((value < 0.25 ? 110 : 150) * opacity[i])
     }
   })
   return { url, coordinates: imageCoordinates(bounds).coordinates }
 }
 export async function loadCoverageOverlay(signal: AbortSignal) {
   const { values, width, height, bounds, nodata } = await readAlignedRaster('/flood/coverage-mask', signal)
+  const valid = Uint8Array.from(values, value => Number.isFinite(value) && value !== nodata && value >= 0 && value <= 1 ? 1 : 0)
+  const opacity = featherRasterMask(valid, width, height)
   const url = canvasFromPixels(width, height, pixels => {
     for (let i = 0; i < width * height; i++) {
       const value = Number(values[i])
       if (!Number.isFinite(value) || value === nodata || value >= 0.5) continue
       const x = i % width
       const y = Math.floor(i / width)
-      const hatch = ((x + y) % 8) < 2
-      pixels.data[i * 4] = hatch ? 226 : 15
-      pixels.data[i * 4 + 1] = hatch ? 232 : 23
-      pixels.data[i * 4 + 2] = hatch ? 240 : 42
-      pixels.data[i * 4 + 3] = hatch ? 90 : 36
+      const phase = (x + y) % 12
+      const stripe = Math.max(0, 1 - Math.min(phase, 12 - phase) / 2)
+      pixels.data[i * 4] = 203
+      pixels.data[i * 4 + 1] = 213
+      pixels.data[i * 4 + 2] = 225
+      pixels.data[i * 4 + 3] = Math.round(55 * stripe * opacity[i])
     }
   })
   return { url, coordinates: imageCoordinates(bounds).coordinates }

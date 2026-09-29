@@ -1,3 +1,4 @@
+import { useTheme } from '../theme/ThemeProvider'
 import React, { useState } from 'react'
 import {
   View,
@@ -10,11 +11,13 @@ import {
 } from 'react-native'
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import { Colors, Fonts, FontSizes } from '../theme'
-import { API_BASE } from '../api/config'
+import { getApiBase } from '../api/config'
 import { windowQuery } from '../api/floodApi'
 import type { EventSummary, EventWindows, EventWindow } from '../api/floodApi'
 
 interface Props {
+  source: import("../api/floodApi").RainfallSource
+  onSource: (value: import("../api/floodApi").RainfallSource) => void
   events: string[]
   event: string
   eventsLoading: boolean
@@ -28,6 +31,7 @@ interface Props {
   onSelectEvent: (date: string) => void
   onSelectMinutes: (val: number) => void
   onRefresh: () => void
+  onOpenSettings: () => void
 }
 
 const WINDOW_VALUES = [15, 30, 60, 90, 120, 180]
@@ -48,6 +52,7 @@ function formatEventLabel(dateStr: string): { title: string; subtitle: string } 
 }
 
 export default function EventsSheet({
+  source, onSource,
   events,
   event,
   eventsLoading,
@@ -61,7 +66,10 @@ export default function EventsSheet({
   onSelectEvent,
   onSelectMinutes,
   onRefresh,
+  onOpenSettings,
 }: Props) {
+  const { colors: Colors } = useTheme()
+  const styles = makeStyles(Colors)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const currentEventInfo = formatEventLabel(event || (events[0] ?? ''))
 
@@ -72,17 +80,19 @@ export default function EventsSheet({
       showsVerticalScrollIndicator={false}
       nestedScrollEnabled
     >
+      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>{(['observed'] as const).map(value => <TouchableOpacity key={value} onPress={() => onSource(value)} style={{ flex: 1, padding: 12, borderRadius: 9, borderWidth: 1, borderColor: Colors.borderPrimary, backgroundColor: source === value ? Colors.gold : Colors.bgSecondary }}><Text style={{ textAlign: 'center', color: source === value ? Colors.onAccent : Colors.textPrimary }}>{'Nowcast Model' }</Text></TouchableOpacity>)}</View>
+
       {/* SECTION 1: Historical Date Selection Dropdown */}
       <View style={styles.section}>
         <View style={styles.sectionHeaderRow}>
           <View style={styles.sectionTitleWrap}>
             <Ionicons name="calendar" size={13} color={Colors.gold} />
-            <Text style={styles.sectionTitle}>HISTORICAL FLOOD EVENT</Text>
+            <Text style={styles.sectionTitle}>Historical flood event</Text>
           </View>
           {eventsLoading && (
             <View style={styles.loadingPill}>
               <ActivityIndicator size="small" color={Colors.gold} />
-              <Text style={styles.loadingPillText}>UPDATING</Text>
+              <Text style={styles.loadingPillText}>Updating</Text>
             </View>
           )}
         </View>
@@ -132,6 +142,11 @@ export default function EventsSheet({
             />
           </TouchableOpacity>
         </View>
+
+        <TouchableOpacity onPress={onOpenSettings} accessibilityLabel="API server settings" style={styles.serverSettings}>
+          <Ionicons name="settings-outline" size={14} color={Colors.cyan} />
+          <Text style={styles.serverSettingsText}>API server settings</Text>
+        </TouchableOpacity>
 
         {/* Dropdown Menu Options */}
         {dropdownOpen && (
@@ -200,21 +215,21 @@ export default function EventsSheet({
         <View style={styles.sectionHeaderRow}>
           <View style={styles.sectionTitleWrap}>
             <MaterialCommunityIcons name="clock-outline" size={13} color={Colors.cyan} />
-            <Text style={styles.sectionTitle}>ACCUMULATION WINDOW</Text>
+            <Text style={styles.sectionTitle}>Accumulation window</Text>
           </View>
 
           {activeWindow && (
             <View style={styles.timeRangePill}>
               <View style={styles.timeRangeDot} />
               <Text style={styles.timeRangeText}>
-                {activeWindow.start_time.slice(11, 16)} → {activeWindow.end_time.slice(11, 16)}
+                {activeWindow.start_time.match(/\d{2}:\d{2}/)?.[0]} → {activeWindow.end_time.match(/\d{2}:\d{2}/)?.[0]}
               </Text>
             </View>
           )}
         </View>
 
         <View style={styles.intervalGrid}>
-          {WINDOW_VALUES.map((val) => {
+          {(windows?.windows.map(window => window.minutes) ?? WINDOW_VALUES).map((val) => {
             const available = windows?.windows.some((w) => w.minutes === val)
             const isActive = !!activeWindow && val === minutes
             return (
@@ -250,7 +265,7 @@ export default function EventsSheet({
           <View style={styles.sectionHeaderRow}>
             <View style={styles.sectionTitleWrap}>
               <MaterialCommunityIcons name="chart-bar" size={13} color={Colors.gold} />
-              <Text style={styles.sectionTitle}>EVENT SUMMARY INDEX</Text>
+              <Text style={styles.sectionTitle}>Event summary index</Text>
             </View>
             <View style={styles.fsiPill}>
               <Text style={styles.fsiPillText}>FSI SCALE 0 - 1</Text>
@@ -261,7 +276,7 @@ export default function EventsSheet({
             <View style={styles.statsGrid}>
               {/* MIN */}
               <View style={styles.statBox}>
-                <Text style={styles.statLabel}>MIN RISK</Text>
+                <Text style={styles.statLabel}>Min risk</Text>
                 <Text style={styles.statValueMin}>{summary.fsi_min.toFixed(2)}</Text>
                 <Text style={styles.statSubLabel}>Baseline</Text>
               </View>
@@ -270,7 +285,7 @@ export default function EventsSheet({
 
               {/* MEAN */}
               <View style={styles.statBox}>
-                <Text style={styles.statLabel}>AVG FSI</Text>
+                <Text style={styles.statLabel}>Avg fsi</Text>
                 <Text style={styles.statValueMean}>{summary.fsi_mean.toFixed(2)}</Text>
                 <Text style={styles.statSubLabel}>Citywide</Text>
               </View>
@@ -279,7 +294,7 @@ export default function EventsSheet({
 
               {/* MAX */}
               <View style={styles.statBox}>
-                <Text style={styles.statLabel}>PEAK FSI</Text>
+                <Text style={styles.statLabel}>Peak fsi</Text>
                 <Text style={styles.statValueMax}>{summary.fsi_max.toFixed(2)}</Text>
                 <Text style={styles.statSubLabel}>Critical</Text>
               </View>
@@ -293,7 +308,7 @@ export default function EventsSheet({
         <TouchableOpacity
           style={styles.downloadBtn}
           onPress={() => {
-            const url = `${API_BASE}/flood/raster/${encodeURIComponent(event)}${windowQuery(selectedMinutes)}`
+            const url = `${getApiBase()}/flood/raster/${encodeURIComponent(event)}${windowQuery(selectedMinutes, source)}`
             Linking.openURL(url)
           }}
           activeOpacity={0.8}
@@ -309,7 +324,19 @@ export default function EventsSheet({
   )
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet.create({
+  serverSettings: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 5,
+    paddingVertical: 8,
+  },
+  serverSettingsText: {
+    color: Colors.cyan,
+    fontFamily: Fonts.bodyBold,
+    fontSize: 11,
+  },
   container: {
     flex: 1,
     backgroundColor: 'transparent',
@@ -335,24 +362,24 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   sectionTitle: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 0.8,
+    letterSpacing: 0,
     color: Colors.textSecondary,
-    textTransform: 'uppercase',
+    textTransform: 'none',
   },
   loadingPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: 'rgba(212,175,55,0.1)',
+    backgroundColor: Colors.accentMuted,
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
   loadingPillText: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 8.5,
     color: Colors.gold,
   },
@@ -366,9 +393,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#060710',
+    backgroundColor: Colors.surfaceRaised,
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.25)',
+    borderColor: Colors.borderPrimary,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 9,
@@ -380,7 +407,7 @@ const styles = StyleSheet.create({
   },
   dropdownTriggerActive: {
     borderColor: Colors.gold,
-    backgroundColor: '#04040a',
+    backgroundColor: Colors.bgVoid,
     borderBottomLeftRadius: 4,
     borderBottomRightRadius: 4,
   },
@@ -395,9 +422,9 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: 'rgba(212,175,55,0.1)',
+    backgroundColor: Colors.accentMuted,
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.25)',
+    borderColor: Colors.borderPrimary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -406,11 +433,11 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   dropdownDateText: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 13,
     fontWeight: '700',
     color: Colors.textHeading,
-    letterSpacing: 0.5,
+    letterSpacing: 0,
   },
   dropdownSubtext: {
     fontFamily: Fonts.body,
@@ -425,9 +452,9 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 10,
-    backgroundColor: '#060710',
+    backgroundColor: Colors.surfaceRaised,
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.25)',
+    borderColor: Colors.borderPrimary,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -437,9 +464,9 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   dropdownMenu: {
-    backgroundColor: '#04040a',
+    backgroundColor: Colors.bgVoid,
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.3)',
+    borderColor: Colors.borderActive,
     borderRadius: 10,
     marginTop: 2,
     overflow: 'hidden',
@@ -456,13 +483,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
+    borderBottomColor: Colors.divider,
   },
   dropdownItemLast: {
     borderBottomWidth: 0,
   },
   dropdownItemActive: {
-    backgroundColor: 'rgba(212,175,55,0.12)',
+    backgroundColor: Colors.accentMuted,
   },
   dropdownItemLeft: {
     flex: 1,
@@ -492,7 +519,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   itemDateText: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 12.5,
     fontWeight: '700',
     color: Colors.textPrimary,
@@ -510,7 +537,7 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: 'rgba(212,175,55,0.2)',
+    backgroundColor: Colors.accentStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -527,9 +554,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: 'rgba(0,229,255,0.08)',
+    backgroundColor: Colors.cyanMuted,
     borderWidth: 1,
-    borderColor: 'rgba(0,229,255,0.25)',
+    borderColor: Colors.cyan,
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 2.5,
@@ -541,7 +568,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.cyan,
   },
   timeRangeText: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 10,
     color: Colors.cyan,
     fontWeight: '700',
@@ -557,8 +584,8 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 9,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: '#060710',
+    borderColor: Colors.borderSecondary,
+    backgroundColor: Colors.surfaceRaised,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -570,18 +597,18 @@ const styles = StyleSheet.create({
   },
   intervalBtnActive: {
     borderColor: Colors.gold,
-    backgroundColor: 'rgba(212,175,55,0.18)',
+    backgroundColor: Colors.accentStrong,
     borderWidth: 1.5,
   },
   intervalBtnDisabled: {
     opacity: 0.35,
   },
   intervalBtnText: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 11.5,
     fontWeight: '700',
     color: Colors.textSecondary,
-    letterSpacing: 0.2,
+    letterSpacing: 0,
   },
   intervalBtnTextActive: {
     color: Colors.goldLight,
@@ -597,7 +624,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.gold,
   },
   fsiPill: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: Colors.bgSecondary,
     borderRadius: 4,
     paddingHorizontal: 5,
     paddingVertical: 2,
@@ -610,8 +637,8 @@ const styles = StyleSheet.create({
   statsCard: {
     borderRadius: 11,
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.2)',
-    backgroundColor: '#060710',
+    borderColor: Colors.borderPrimary,
+    backgroundColor: Colors.surfaceRaised,
     paddingVertical: 10,
     paddingHorizontal: 12,
     shadowColor: '#000',
@@ -632,37 +659,37 @@ const styles = StyleSheet.create({
   statDivider: {
     width: 1,
     height: 32,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: Colors.divider,
   },
   statLabel: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 9,
     color: Colors.textSecondary,
-    letterSpacing: 0.6,
+    letterSpacing: 0,
     marginBottom: 2,
   },
   statValueMin: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 16,
     fontWeight: '800',
-    color: '#94a3b8',
+    color: Colors.textSecondary,
   },
   statValueMean: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 16,
     fontWeight: '800',
     color: Colors.cyan,
   },
   statValueMax: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 16,
     fontWeight: '800',
-    color: '#fbbf24',
+    color: Colors.amber400,
   },
   statSubLabel: {
     fontFamily: Fonts.body,
     fontSize: 9.5,
-    color: 'rgba(155,151,142,0.7)',
+    color: Colors.textSecondary,
     marginTop: 1,
   },
   downloadBtn: {
@@ -672,8 +699,8 @@ const styles = StyleSheet.create({
     gap: 8,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.35)',
-    backgroundColor: 'rgba(212,175,55,0.08)',
+    borderColor: Colors.borderActive,
+    backgroundColor: Colors.accentMuted,
     paddingVertical: 11,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -685,15 +712,15 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 6,
-    backgroundColor: 'rgba(212,175,55,0.15)',
+    backgroundColor: Colors.accentStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
   downloadText: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 11.5,
     fontWeight: '700',
     color: Colors.goldLight,
-    letterSpacing: 0.4,
+    letterSpacing: 0,
   },
 })

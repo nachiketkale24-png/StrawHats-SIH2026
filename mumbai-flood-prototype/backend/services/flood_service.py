@@ -1,6 +1,7 @@
 """
-Serves precomputed FSI rasters. Loads raster metadata lazily/once per event
-and caches it in memory — never recomputes FSI from raw rainfall/DEM/land
+Serves drainage-integrated risk when available, with legacy plain-FSI fallback.
+Caches rasters in memory and refreshes them when the file changes.
+Never recomputes FSI from raw rainfall/DEM/land
 cover inside a request (that stays in the offline pipeline).
 """
 
@@ -11,7 +12,7 @@ from pathlib import Path
 import rasterio
 
 from pipeline import config
-from .event_windows import get_windows
+from .event_windows import RainfallSource, get_windows
 
 
 class FloodService:
@@ -19,28 +20,38 @@ class FloodService:
         self._raster_cache = {}  # event_date -> (array, transform, crs, nodata)
         self._coverage = None
 
-    def list_available_events(self):
-        pattern = str(config.DATA_PROCESSED_DIR / "flood_risk_*.tif")
+    def list_available_events(self, rainfall_source: RainfallSource = RainfallSource.OBSERVED):
+        source = RainfallSource(rainfall_source)
+        pattern = str(config.DATA_PROCESSED_DIR / (
+            "flood_risk_nowcast_*.tif" if source is RainfallSource.NOWCAST else "flood_risk_*.tif"
+        ))
         files = glob.glob(pattern)
         events = []
         for f in files:
-            match = re.search(r"flood_risk_(\d{4}-\d{2}-\d{2})\.tif", f)
+            expression = (r"flood_risk_nowcast_(\d{4}-\d{2}-\d{2})_\d+min\.tif"
+                          if source is RainfallSource.NOWCAST else r"flood_risk_(\d{4}-\d{2}-\d{2})\.tif")
+            match = re.search(expression, f)
             if match:
                 events.append(match.group(1))
-        for path in config.DATA_PROCESSED_DIR.glob('event_windows_*.json'):
-            event = path.stem.removeprefix('event_windows_')
-            if get_windows(event)['windows']:
+        manifest_glob = 'nowcast_event_windows_*.json' if source is RainfallSource.NOWCAST else 'event_windows_*.json'
+        manifest_prefix = 'nowcast_event_windows_' if source is RainfallSource.NOWCAST else 'event_windows_'
+        for path in config.DATA_PROCESSED_DIR.glob(manifest_glob):
+            event = path.stem.removeprefix(manifest_prefix)
+            if get_windows(event, source)['windows']:
                 events.append(event)
         return sorted(set(events))
 
     def _load_raster(self, event_date: str):
-        if event_date not in self._raster_cache:
-            path = config.flood_risk_tif(event_date)
+        path = Path(self.get_raster_path(event_date))
+        stamp = (str(path), path.stat().st_mtime_ns)
+        if (event_date not in self._raster_cache or
+                self._raster_cache[event_date].get("stamp") != stamp):
             if not Path(path).exists():
                 raise FileNotFoundError(f"No FSI raster found for event {event_date}")
             with rasterio.open(path) as src:
                 array = src.read(1)
                 self._raster_cache[event_date] = {
+                    "stamp": stamp,
                     "array": array,
                     "transform": src.transform,
                     "crs": src.crs,
@@ -94,7 +105,9 @@ class FloodService:
 
     def get_raster_path(self, event_date: str) -> str:
         """Used to serve the raw GeoTIFF file directly (e.g. for a tile server)."""
-        path = config.flood_risk_tif(event_date)
+        path = config.integrated_flood_risk_tif(event_date)
+        if not path.exists():
+            path = config.flood_risk_tif(event_date)
         if not Path(path).exists():
             raise FileNotFoundError(f"No FSI raster found for event {event_date}")
         return str(path)

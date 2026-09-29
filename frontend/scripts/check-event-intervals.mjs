@@ -1,7 +1,7 @@
 ﻿import assert from 'node:assert/strict'
 import { fromArrayBuffer } from 'geotiff'
 
-const base = process.argv[2] || 'http://localhost:5174/api'
+const base = process.argv[2] || 'http://localhost:5173/api'
 const durations = [15, 30, 60, 90, 120, 180]
 async function request(path, options) {
   const response = await fetch(base + path, options)
@@ -22,7 +22,7 @@ for (const event of ['2015-06-19', '2017-08-29', '2020-09-23']) {
     means.push(summary.fsi_mean)
     const image = await (await fromArrayBuffer(await (await request(`/flood/raster/${event}${query}`)).arrayBuffer())).getImage()
     const values = await image.readRasters({samples:[0],interleave:true})
-    const index = Array.from(values).findIndex(value => value > 0.25 && value < 0.75)
+    const index = Array.from(values).findIndex(value => Number.isFinite(value) && value >= 0 && value <= 1 && value !== image.getGDALNoData())
     assert.ok(index >= 0)
     const [west,south,east,north] = image.getBoundingBox()
     const lon = west + ((index % image.getWidth()) + 0.5) / image.getWidth() * (east-west)
@@ -30,12 +30,14 @@ for (const event of ['2015-06-19', '2017-08-29', '2020-09-23']) {
     const point = await (await request(`/flood/point/${event}${query}&lon=${lon}&lat=${lat}`)).json()
     assert.ok(Math.abs(point.fsi - values[index]) < 1e-6)
     if (minutes === 15 || minutes === 180) {
-      const route = await (await request('/route', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_date:event,window_minutes:minutes,origin_lon:72.85,origin_lat:19.11,dest_lon:72.86,dest_lat:19.2})})).json()
+      const route = await (await request('/route', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_date:event,window_minutes:minutes,risk_tolerance:'severe',origin_lon:72.85,origin_lat:19.11,dest_lon:72.86,dest_lat:19.2})})).json()
       assert.equal(route.event_date,event)
-      for (const result of [route.normal_route,route.flood_aware_route]) {
+      for (const result of [route.normal_route]) {
         assert.ok(result.length_m > 0 && result.coordinates.length > 1)
         assert.ok(result.max_risk >= 0 && result.max_risk <= 1)
       }
+      assert.ok(route.tolerance_route.coordinates.length > 1 && route.tolerance_distance_km > 0)
+      assert.ok(route.max_risk_on_route >= 0 && route.max_risk_on_route <= 1)
     }
   }
   assert.ok(new Set(means).size > 1, 'Intervals must use different observed rainfall')

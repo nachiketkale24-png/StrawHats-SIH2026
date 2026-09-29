@@ -1,6 +1,5 @@
 import type { FloodCell, ForecastFrame, ForecastOffset, MockFloodData, RoadNetwork, RoutePoint } from '../types/flood'
 import { MUMBAI_BOUNDS } from '../config/mumbai.ts'
-import { drainageNodes, generateDrainageGraph } from './mockDrainage.ts'
 
 export const FORECAST_OFFSETS: ForecastOffset[] = [0, 30, 60, 90, 120, 180]
 export const GRID_SUBDIVISIONS = 40
@@ -73,11 +72,7 @@ export function generateMockFlood(): MockFloodData {
       },
     }
   }
-  return {
-    frames,
-    ...generateDrainageGraph(),
-    drainage: { type: 'FeatureCollection', features: drainageNodes.map((node) => ({ type: 'Feature', id: node.id, properties: node, geometry: { type: 'Point', coordinates: coordinate(node) } })) },
-  }
+  return { frames }
 }
 
 // Generate once on module load; a future API adapter can return this same shape.

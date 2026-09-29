@@ -1,3 +1,4 @@
+import { useTheme } from '../theme/ThemeProvider'
 /**
  * Floating mode guide pill matching the web's mobile top guide.
  * Shows current interaction hint: "Tap map to inspect FSI" / "Tap point A (Start)" etc.
@@ -25,6 +26,8 @@ export default function ModeGuide({
   onClearMode,
   onReset,
 }: Props) {
+  const { colors: Colors } = useTheme()
+  const styles = makeStyles(Colors)
   if (mode === 'route-address') return null
 
   const handleReset = onClearMode || onReset
@@ -66,7 +69,7 @@ export default function ModeGuide({
   )
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet.create({
   wrapper: {
     position: 'absolute',
     top: 10,
@@ -82,7 +85,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
     borderColor: Colors.borderSecondary,
-    backgroundColor: 'rgba(12, 14, 26, 0.92)',
+    backgroundColor: Colors.bgPanel,
     paddingHorizontal: 12,
     paddingVertical: 6,
     shadowColor: '#000',
@@ -97,7 +100,7 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   textGold: {
-    fontFamily: Fonts.monoBold,
+    fontFamily: Fonts.bodyBold,
     fontSize: 11,
     color: Colors.goldLight,
   },

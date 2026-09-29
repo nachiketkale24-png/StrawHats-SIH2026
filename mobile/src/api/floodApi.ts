@@ -2,8 +2,10 @@
  * Flood API client — direct port of the web frontend's lib/floodApi.ts.
  * Includes enhanced Mumbai landmark auto-suggestions and Nominatim geocoding.
  */
-import { getApiBase } from './config'
+import { getApiBase, saveApiBase, suggestedApiBase, setApiBase } from './config'
 import type { RoutePoint } from '../types/flood'
+export type RainfallSource = 'observed' | 'nowcast'
+export type RiskTolerance = 'low' | 'medium' | 'high' | 'severe'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -36,9 +38,35 @@ export interface ApiRoute {
 export interface RouteComparison {
   event_date: string
   normal_route: ApiRoute
-  flood_aware_route: ApiRoute
-  extra_distance_m: number
-  extra_distance_pct: number
+  tolerance_route: { type: 'LineString'; coordinates: [number, number][] } | null
+  tolerance_distance_km: number | null
+  max_risk_on_route: number | null
+  high_severe_segment_count: number
+  warning: string | null
+  suggested_route: (ApiRoute & { risk_tolerance: RiskTolerance }) | null
+}
+export interface DrainageResponse {
+  summary: { total_manholes: number; surcharged_manholes: number; total_conduits: number; surcharged_conduits: number }
+  manholes: { type: 'FeatureCollection'; features: { geometry: { coordinates: [number, number] }; properties: { id: string; surcharged: boolean; surcharge_ratio: number | null } }[] }
+  conduits: { type: 'FeatureCollection'; features: { geometry: { coordinates: [number, number][] }; properties: { id: string; surcharged: boolean; surcharge_ratio: number | null } }[] }
+}
+const drainageCache = new Map<string, { data: DrainageResponse; expires: number }>()
+export function clearMobileCache() { drainageCache.clear() }
+export async function getDrainage(event: string, signal: AbortSignal, minutes?: number,
+  source: RainfallSource = 'observed', mode: 'summary' | 'affected' | 'full' = 'summary'): Promise<DrainageResponse> {
+  const query = new URLSearchParams(windowQuery(minutes, source).slice(1))
+  if (mode === 'summary') query.set('summary_only', 'true')
+  if (mode === 'full') query.set('full', 'true')
+  const path = `/drainage/${encodeURIComponent(event)}?${query}`
+  const key = getApiBase() + path
+  const cached = drainageCache.get(key)
+  if (cached && cached.expires > Date.now()) return cached.data
+  const data: DrainageResponse = await (await apiRequest(path, signal)).json()
+  if (!signal.aborted) {
+    drainageCache.set(key, { data, expires: Date.now() + 300000 })
+    while (drainageCache.size > 18) drainageCache.delete(drainageCache.keys().next().value!)
+  }
+  return data
 }
 
 export interface GeocodeResult {
@@ -88,8 +116,11 @@ const MUMBAI_LANDMARKS: GeocodeResult[] = [
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-export function windowQuery(minutes?: number): string {
-  return minutes === undefined ? '' : `?window_minutes=${minutes}`
+export function windowQuery(minutes?: number, source: RainfallSource = 'observed'): string {
+  const query = new URLSearchParams()
+  if (minutes !== undefined) query.set('window_minutes', String(minutes))
+  if (source === 'nowcast') query.set('rainfall_source', source)
+  return query.toString() ? `?${query}` : ''
 }
 
 export async function apiRequest(
@@ -98,7 +129,9 @@ export async function apiRequest(
   body?: unknown
 ): Promise<Response> {
   const base = getApiBase()
-  const response = await fetch(`${base}${path}`, {
+  let response: Response
+  try {
+    response = await fetch(`${base}${path}`, {
     signal,
     ...(body === undefined
       ? {}
@@ -107,7 +140,11 @@ export async function apiRequest(
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         }),
-  })
+    })
+  } catch (error) {
+    if (signal?.aborted) throw error
+    throw new Error(`Cannot reach ${base}. Use the PC's current Wi-Fi IPv4 address, start the API with --host 0.0.0.0, and keep the phone on the same network.`)
+  }
   if (!response.ok) {
     const error = await response.json().catch(() => null)
     throw new Error(
@@ -121,8 +158,25 @@ export async function apiRequest(
 
 // ─── API Functions ───────────────────────────────────────────────────────────
 
-export async function getEvents(signal?: AbortSignal): Promise<string[]> {
-  const events = await (await apiRequest('/flood/events', signal)).json()
+export async function getEvents(signal?: AbortSignal, source: RainfallSource = 'observed'): Promise<string[]> {
+  const path = '/flood/events' + windowQuery(undefined, source)
+  let events: unknown
+  try {
+    events = await (await apiRequest(path, signal)).json()
+  } catch (error) {
+    // A saved Wi-Fi address becomes stale when the PC joins another network.
+    if (!suggestedApiBase || suggestedApiBase === getApiBase() || signal?.aborted ||
+        !(error instanceof Error) || !error.message.startsWith('Cannot reach ')) throw error
+    const previous = getApiBase()
+    setApiBase(suggestedApiBase)
+    try {
+      events = await (await apiRequest(path, signal)).json()
+      await saveApiBase(suggestedApiBase)
+    } catch {
+      setApiBase(previous)
+      throw error
+    }
+  }
   if (
     !Array.isArray(events) ||
     !events.every((event: unknown) => typeof event === 'string')
@@ -134,11 +188,12 @@ export async function getEvents(signal?: AbortSignal): Promise<string[]> {
 
 export async function getWindows(
   event: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  source: RainfallSource = 'observed'
 ): Promise<EventWindows> {
   return (
     await apiRequest(
-      `/flood/windows/${encodeURIComponent(event)}`,
+      `/flood/windows/${encodeURIComponent(event)}${windowQuery(undefined, source)}`,
       signal
     )
   ).json()
@@ -147,11 +202,12 @@ export async function getWindows(
 export async function getSummary(
   event: string,
   signal?: AbortSignal,
-  minutes?: number
+  minutes?: number,
+  source: RainfallSource = 'observed'
 ): Promise<EventSummary> {
   return (
     await apiRequest(
-      `/flood/summary/${encodeURIComponent(event)}${windowQuery(minutes)}`,
+      `/flood/summary/${encodeURIComponent(event)}${windowQuery(minutes, source)}`,
       signal
     )
   ).json()
@@ -162,9 +218,11 @@ export async function getRoutes(
   start: RoutePoint,
   end: RoutePoint,
   signal?: AbortSignal,
-  minutes?: number
+  minutes?: number,
+  tolerance: RiskTolerance = 'low',
+  source: RainfallSource = 'observed'
 ): Promise<RouteComparison> {
-  return (
+  const result = await (
     await apiRequest('/route', signal, {
       event_date: event,
       origin_lat: start.lat,
@@ -172,8 +230,17 @@ export async function getRoutes(
       dest_lat: end.lat,
       dest_lon: end.lng,
       window_minutes: minutes,
+      risk_tolerance: tolerance,
+      rainfall_source: source,
     })
   ).json()
+  if (!result.normal_route || !Number.isFinite(result.normal_route.length_m)) {
+    throw new Error('Unexpected route response. Check the API server version.')
+  }
+  if (result.tolerance_route !== null && result.tolerance_route?.type !== 'LineString') {
+    throw new Error('The backend does not provide tolerance-aware routes. Restart the updated backend.')
+  }
+  return { ...result, suggested_route: result.suggested_route ?? null, warning: result.warning ?? null }
 }
 
 export async function getPointValue(
@@ -181,10 +248,12 @@ export async function getPointValue(
   lon: number,
   lat: number,
   signal?: AbortSignal,
-  windowMinutes?: number
+  windowMinutes?: number,
+  source: RainfallSource = 'observed'
 ): Promise<{ event_date: string; lon: number; lat: number; fsi: number | null; in_station_network?: boolean }> {
   const query = new URLSearchParams({ lon: String(lon), lat: String(lat) })
   if (windowMinutes !== undefined) query.set('window_minutes', String(windowMinutes))
+  if (source === 'nowcast') query.set('rainfall_source', source)
   return (
     await apiRequest(
       `/flood/point/${encodeURIComponent(event)}?${query}`,
