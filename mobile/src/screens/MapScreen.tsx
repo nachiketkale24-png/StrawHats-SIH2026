@@ -7,15 +7,12 @@ import {
   View,
   StyleSheet,
   TouchableOpacity,
-  Text,
   Animated,
   Dimensions,
   Alert,
   PanResponder,
 } from 'react-native'
-import * as Location from 'expo-location'
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { Ionicons } from '@expo/vector-icons'
 
 import { useFloodData } from '../hooks/useFloodData'
 import Header from '../components/Header'
@@ -28,7 +25,7 @@ import StatusToast from '../components/StatusToast'
 import ModeGuide from '../components/ModeGuide'
 import { SettingsModal } from '../components/SettingsModal'
 import MapView from 'react-native-maps'
-import { HOME, InteractiveMap } from '../components/InteractiveMap'
+import { InteractiveMap } from '../components/InteractiveMap'
 
 import { Colors, Fonts } from '../theme'
 import type { RoutePoint } from '../types/flood'
@@ -39,14 +36,12 @@ const SHEET_HEIGHT = Math.min(SCREEN_HEIGHT * 0.58, 480)
 export default function MapScreen() {
   const { colors: Colors } = useTheme()
   const styles = makeStyles(Colors)
-  const insets = useSafeAreaInsets()
   const mapRef = useRef<MapView>(null)
   const { satellite, setSatellite } = useTheme()
   const [floodVisible, setFloodVisible] = useState(true)
   const [traffic, setTraffic] = useState(false)
   const [roadsVisible, setRoadsVisible] = useState(false)
   const [mapStatus, setMapStatus] = useState('')
-  const [cardsHidden, setCardsHidden] = useState(false)
 
   // Data hook
   const {
@@ -143,12 +138,12 @@ export default function MapScreen() {
   const handleMapPress = async ({ latitude, longitude }: { latitude: number; longitude: number }) => {
     if (mode === 'inspect') {
       setInspectCoord({ lat: latitude, lng: longitude })
-      if (!cardsHidden) setActiveTab('inspect')
+      setActiveTab('inspect')
     } else if (mode === 'route') {
       addPoint({ lat: latitude, lng: longitude })
       if (points.length === 1) {
         // Point B picked -> switch back to Routes tab to view comparison
-        if (!cardsHidden) setActiveTab('routes')
+        setActiveTab('routes')
       }
     }
   }
@@ -177,29 +172,10 @@ export default function MapScreen() {
       ])
     }
   }, [routes])
-  const handleRecenter = () => mapRef.current?.animateToRegion(HOME, 500)
-  const handleMyLocation = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync()
-      if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'GPS permission is needed to locate your device.')
-        return
-      }
-      const loc = await Location.getCurrentPositionAsync({})
-      mapRef.current?.animateToRegion({ latitude: loc.coords.latitude, longitude: loc.coords.longitude, latitudeDelta: .025, longitudeDelta: .025 }, 500)
-    } catch {
-      Alert.alert('Location Error', 'Could not obtain current GPS location.')
-    }
-  }
-
   return (
     <View style={styles.container}>
       {/* Top Header with Safe Area Inset */}
-      <Header
-        activeEvent={event}
-        loading={eventsLoading}
-        onOpenSettings={() => setSettingsVisible(true)}
-      />
+      <Header />
 
       {/* Main Map View Container */}
       <View style={styles.mapWrapper}>
@@ -218,7 +194,7 @@ export default function MapScreen() {
         />
 
         {/* Floating Top Mode Guide Pill */}
-        {!cardsHidden && <ModeGuide
+        <ModeGuide
           mode={mode}
           pointCount={points.length}
           onClearMode={() => {
@@ -227,29 +203,13 @@ export default function MapScreen() {
           }}
         />
 
-        }
-        {/* Floating Map Action Controls (Right side) */}
-        {!cardsHidden && <View style={styles.mapControls}>
-          <TouchableOpacity
-            style={styles.controlBtn}
-            onPress={handleMyLocation}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="navigate" size={17} color={Colors.cyan} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.controlBtn}
-            onPress={handleRecenter}
-            activeOpacity={0.7}
-          >
-            <MaterialCommunityIcons name="crosshairs-gps" size={18} color={Colors.gold} />
-          </TouchableOpacity>
-
+        {/* Match the web mobile map's single floating view button. */}
+        <View style={styles.mapControls}>
           <TouchableOpacity
             style={styles.controlBtn}
             onPress={() => setMapType(mapType === 'standard' ? 'satellite' : 'standard')}
             activeOpacity={0.7}
+            accessibilityLabel="Toggle satellite view"
           >
             <Ionicons
               name={mapType === 'standard' ? 'earth-outline' : 'map-outline'}
@@ -258,7 +218,7 @@ export default function MapScreen() {
             />
           </TouchableOpacity>
 
-        </View>}
+        </View>
 
         {/* Floating Status / Error Banner */}
         <StatusToast
@@ -301,6 +261,7 @@ export default function MapScreen() {
                 onSelectEvent={selectEvent}
                 onSelectMinutes={selectMinutes}
                 onRefresh={handleRefresh}
+                onOpenSettings={() => setSettingsVisible(true)}
               />
             )}
 
@@ -348,9 +309,8 @@ export default function MapScreen() {
         </Animated.View>
       </View>
 
-      {/* Bottom Tab Bar Dock — wrapped to extend dark bg behind Android gesture bar */}
-      <TouchableOpacity onPress={() => { setCardsHidden(value => !value); setActiveTab(null) }} style={{ position: 'absolute', left: 12, bottom: insets.bottom + 80, zIndex: 40, padding: 10, borderRadius: 9, backgroundColor: Colors.bgPanel }}><Text style={{ color: Colors.textPrimary }}>{cardsHidden ? 'Show panels' : 'Hide all panels'}</Text></TouchableOpacity>
-      {!cardsHidden && <View style={styles.bottomDock}>
+      {/* Bottom navigation mirrors the web mobile layout. */}
+      <View style={styles.bottomDock}>
         <BottomTabBar
           activeTab={activeTab}
           onSelectTab={(tab) => {
@@ -363,7 +323,7 @@ export default function MapScreen() {
             }
           }}
         />
-      </View>}
+      </View>
 
       {/* Backend IP Settings Modal */}
       <SettingsModal
@@ -419,7 +379,7 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
     gap: 5,
     backgroundColor: Colors.bgPanel,
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.35)',
+    borderColor: Colors.borderActive,
     borderRadius: 16,
     paddingHorizontal: 10,
     paddingVertical: 6,

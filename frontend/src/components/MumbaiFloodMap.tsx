@@ -118,7 +118,7 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
   const [showTraffic, setShowTraffic] = useState(false)
   const [roadRiskStatus, setRoadRiskStatus] = useState('')
   const [events, setEvents] = useState<string[]>([])
-  const [rainfallSource, setRainfallSource] = useState<RainfallSource>('observed')
+  const rainfallSource: RainfallSource = 'observed'
   const [event, setEvent] = useState('')
   const [windows, setWindows] = useState<EventWindows | null>(null)
   const [minutes, setMinutes] = useState(15)
@@ -370,7 +370,7 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
                 <div className="flex items-center justify-between">
                   <PanelLabel className="flex items-center gap-1.5">
                     <Calendar size={13} className="text-[var(--gold-light)]" />
-                    {rainfallSource === 'nowcast' ? 'Rainfall Nowcast' : 'Observed Rainfall'}
+                    Observed Rainfall
                   </PanelLabel>
                   <button
                     type="button"
@@ -386,15 +386,13 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
 
                 <label className="mt-2.5 block text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
                   Rainfall Source
-                  <select
+                  <div
                     aria-label="Rainfall source"
                     className="mt-1 w-full rounded-xl border border-[var(--border-secondary)] bg-[var(--bg-primary)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] shadow-sm focus:outline-none focus:border-[var(--gold-primary)] transition"
-                    value={rainfallSource}
-                    onChange={e => { setRainfallSource(e.target.value as RainfallSource); setRoutes(null); setSummary(null); setApiError('') }}
+                    defaultValue="observed"
                   >
-                    <option value="nowcast">Model nowcast — forecast</option>
-                    <option value="observed">Observed rainfall — comparison</option>
-                  </select>
+                    <option value="observed">Model Nowcast</option>
+                  </div>
                 </label>
 
                 <label className="mt-2.5 block text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
@@ -628,7 +626,7 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
               <div className="flex items-center gap-1.5">
                 <Clock size={13} className="text-[var(--cyan-primary)]" />
                 <span className="font-[family-name:var(--font-hud)] text-[11px] font-bold uppercase tracking-wider text-[var(--text-heading)]">
-                  {rainfallSource === 'nowcast' ? 'Forecast Window' : 'Observed Window'}
+                  Observed Window
                   {minutes ? ` (${minutes} min)` : ''}
                 </span>
               </div>
@@ -776,11 +774,9 @@ function MumbaiFloodDashboard({ loadError }: { loadError: string | null }) {
                       <select
                         aria-label="Rainfall source"
                         className="mb-2 w-full rounded-xl border border-[var(--border-secondary)] bg-[var(--bg-primary)] px-3 py-2.5 text-xs font-semibold text-[var(--text-primary)] shadow-sm focus:outline-none focus:border-[var(--gold-primary)]"
-                        value={rainfallSource}
-                        onChange={e => { setRainfallSource(e.target.value as RainfallSource); setRoutes(null); setSummary(null); setApiError('') }}
+                        defaultValue="observed"
                       >
-                        <option value="nowcast">Model nowcast — forecast</option>
-                        <option value="observed">Observed rainfall — comparison</option>
+                        <option value="observed">Observed rainfall</option>
                       </select>
                       <div className="flex gap-2">
                         <select

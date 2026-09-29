@@ -6,20 +6,28 @@ export const Colors = {
   // Gold accent family
   goldPrimary: '#d4af37',
   gold: '#d4af37',
-  goldLight: '#e8c968',
+  goldLight: '#fcd34d',
   goldRgb: '212,175,55',
 
   // Cyan accent
-  cyanPrimary: '#00e5ff',
-  cyan: '#00e5ff',
-  cyanGlow: 'rgba(0, 229, 255, 0.4)',
+  cyanPrimary: '#38bdf8',
+  cyan: '#38bdf8',
+  cyanGlow: 'rgba(56, 189, 248, 0.35)',
 
   // Backgrounds
-  bgVoid: '#04040a',
-  bgPrimary: '#06060c',
-  bgSecondary: '#060710',
-  bgPanel: 'rgba(8, 10, 20, 0.95)',
-  bgSheet: '#04040a',
+  bgVoid: '#05070e',
+  bgPrimary: 'rgba(15, 21, 35, 0.72)',
+  bgSecondary: 'rgba(20, 28, 45, 0.65)',
+  bgPanel: 'rgba(13, 18, 30, 0.82)',
+  bgSheet: 'rgba(10, 15, 25, 0.94)',
+  surfaceRaised: 'rgba(20, 28, 45, 0.7)',
+  accentMuted: 'rgba(212,175,55,0.12)',
+  accentStrong: 'rgba(212,175,55,0.18)',
+  cyanMuted: 'rgba(56,189,248,0.12)',
+  divider: 'rgba(255,255,255,0.1)',
+  errorBackground: 'rgba(30,10,15,0.95)',
+  errorBorder: 'rgba(239,68,68,0.4)',
+  textError: '#fca5a5',
 
   // Flood depth scale
   depthLow: '#54768a',
@@ -43,14 +51,15 @@ export const Colors = {
   emerald500: '#10b981',
 
   // Borders
-  borderPrimary: 'rgba(212,175,55,0.22)',
-  borderSecondary: 'rgba(212,175,55,0.1)',
-  borderActive: 'rgba(212,175,55,0.45)',
+  borderPrimary: 'rgba(212,175,55,0.32)',
+  borderSecondary: 'rgba(255,255,255,0.1)',
+  borderActive: 'rgba(212,175,55,0.65)',
 
   // Text
-  textPrimary: '#e8e6e0',
-  textSecondary: '#9b978e',
-  textHeading: '#f5f0e0',
+  textPrimary: '#f1f5f9',
+  textSecondary: '#94a3b8',
+  textHeading: '#ffffff',
+  onAccent: '#080b12',
 
   // Route colors (from eventLayers.ts)
   routeNormal: '#94a3b8',

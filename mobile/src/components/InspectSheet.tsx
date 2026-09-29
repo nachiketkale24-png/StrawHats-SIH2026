@@ -168,7 +168,7 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
   tapMapBtnText: {
     fontFamily: Fonts.bodyBold,
     fontSize: 12,
-    color: '#000',
+    color: Colors.onAccent,
     fontWeight: '700',
   },
   resultContainer: {

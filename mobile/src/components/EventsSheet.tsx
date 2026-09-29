@@ -31,6 +31,7 @@ interface Props {
   onSelectEvent: (date: string) => void
   onSelectMinutes: (val: number) => void
   onRefresh: () => void
+  onOpenSettings: () => void
 }
 
 const WINDOW_VALUES = [15, 30, 60, 90, 120, 180]
@@ -65,6 +66,7 @@ export default function EventsSheet({
   onSelectEvent,
   onSelectMinutes,
   onRefresh,
+  onOpenSettings,
 }: Props) {
   const { colors: Colors } = useTheme()
   const styles = makeStyles(Colors)
@@ -78,7 +80,7 @@ export default function EventsSheet({
       showsVerticalScrollIndicator={false}
       nestedScrollEnabled
     >
-      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>{(['observed','nowcast'] as const).map(value => <TouchableOpacity key={value} onPress={() => onSource(value)} style={{ flex: 1, padding: 12, borderRadius: 9, borderWidth: 1, borderColor: Colors.borderPrimary, backgroundColor: source === value ? Colors.gold : Colors.bgSecondary }}><Text style={{ textAlign: 'center', color: source === value ? Colors.bgVoid : Colors.textPrimary }}>{value === 'observed' ? 'Observed rainfall' : 'Nowcast'}</Text></TouchableOpacity>)}</View>
+      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>{(['observed'] as const).map(value => <TouchableOpacity key={value} onPress={() => onSource(value)} style={{ flex: 1, padding: 12, borderRadius: 9, borderWidth: 1, borderColor: Colors.borderPrimary, backgroundColor: source === value ? Colors.gold : Colors.bgSecondary }}><Text style={{ textAlign: 'center', color: source === value ? Colors.onAccent : Colors.textPrimary }}>{'Nowcast Model' }</Text></TouchableOpacity>)}</View>
 
       {/* SECTION 1: Historical Date Selection Dropdown */}
       <View style={styles.section}>
@@ -140,6 +142,11 @@ export default function EventsSheet({
             />
           </TouchableOpacity>
         </View>
+
+        <TouchableOpacity onPress={onOpenSettings} accessibilityLabel="API server settings" style={styles.serverSettings}>
+          <Ionicons name="settings-outline" size={14} color={Colors.cyan} />
+          <Text style={styles.serverSettingsText}>API server settings</Text>
+        </TouchableOpacity>
 
         {/* Dropdown Menu Options */}
         {dropdownOpen && (
@@ -318,6 +325,18 @@ export default function EventsSheet({
 }
 
 const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet.create({
+  serverSettings: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 5,
+    paddingVertical: 8,
+  },
+  serverSettingsText: {
+    color: Colors.cyan,
+    fontFamily: Fonts.bodyBold,
+    fontSize: 11,
+  },
   container: {
     flex: 1,
     backgroundColor: 'transparent',
@@ -354,7 +373,7 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: 'rgba(212,175,55,0.1)',
+    backgroundColor: Colors.accentMuted,
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -374,9 +393,9 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#060710',
+    backgroundColor: Colors.surfaceRaised,
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.25)',
+    borderColor: Colors.borderPrimary,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 9,
@@ -403,9 +422,9 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: 'rgba(212,175,55,0.1)',
+    backgroundColor: Colors.accentMuted,
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.25)',
+    borderColor: Colors.borderPrimary,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -433,9 +452,9 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
     width: 44,
     height: 44,
     borderRadius: 10,
-    backgroundColor: '#060710',
+    backgroundColor: Colors.surfaceRaised,
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.25)',
+    borderColor: Colors.borderPrimary,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -447,7 +466,7 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
   dropdownMenu: {
     backgroundColor: Colors.bgVoid,
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.3)',
+    borderColor: Colors.borderActive,
     borderRadius: 10,
     marginTop: 2,
     overflow: 'hidden',
@@ -464,13 +483,13 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
+    borderBottomColor: Colors.divider,
   },
   dropdownItemLast: {
     borderBottomWidth: 0,
   },
   dropdownItemActive: {
-    backgroundColor: 'rgba(212,175,55,0.12)',
+    backgroundColor: Colors.accentMuted,
   },
   dropdownItemLeft: {
     flex: 1,
@@ -518,7 +537,7 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: 'rgba(212,175,55,0.2)',
+    backgroundColor: Colors.accentStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -535,9 +554,9 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: 'rgba(0,229,255,0.08)',
+    backgroundColor: Colors.cyanMuted,
     borderWidth: 1,
-    borderColor: 'rgba(0,229,255,0.25)',
+    borderColor: Colors.cyan,
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 2.5,
@@ -565,8 +584,8 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
     height: 40,
     borderRadius: 9,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    backgroundColor: '#060710',
+    borderColor: Colors.borderSecondary,
+    backgroundColor: Colors.surfaceRaised,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -578,7 +597,7 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
   },
   intervalBtnActive: {
     borderColor: Colors.gold,
-    backgroundColor: 'rgba(212,175,55,0.18)',
+    backgroundColor: Colors.accentStrong,
     borderWidth: 1.5,
   },
   intervalBtnDisabled: {
@@ -605,7 +624,7 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
     backgroundColor: Colors.gold,
   },
   fsiPill: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: Colors.bgSecondary,
     borderRadius: 4,
     paddingHorizontal: 5,
     paddingVertical: 2,
@@ -618,8 +637,8 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
   statsCard: {
     borderRadius: 11,
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.2)',
-    backgroundColor: '#060710',
+    borderColor: Colors.borderPrimary,
+    backgroundColor: Colors.surfaceRaised,
     paddingVertical: 10,
     paddingHorizontal: 12,
     shadowColor: '#000',
@@ -640,7 +659,7 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
   statDivider: {
     width: 1,
     height: 32,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: Colors.divider,
   },
   statLabel: {
     fontFamily: Fonts.bodyBold,
@@ -653,7 +672,7 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
     fontFamily: Fonts.bodyBold,
     fontSize: 16,
     fontWeight: '800',
-    color: '#94a3b8',
+    color: Colors.textSecondary,
   },
   statValueMean: {
     fontFamily: Fonts.bodyBold,
@@ -665,12 +684,12 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
     fontFamily: Fonts.bodyBold,
     fontSize: 16,
     fontWeight: '800',
-    color: '#fbbf24',
+    color: Colors.amber400,
   },
   statSubLabel: {
     fontFamily: Fonts.body,
     fontSize: 9.5,
-    color: 'rgba(155,151,142,0.7)',
+    color: Colors.textSecondary,
     marginTop: 1,
   },
   downloadBtn: {
@@ -680,8 +699,8 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
     gap: 8,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.35)',
-    backgroundColor: 'rgba(212,175,55,0.08)',
+    borderColor: Colors.borderActive,
+    backgroundColor: Colors.accentMuted,
     paddingVertical: 11,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -693,7 +712,7 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
     width: 24,
     height: 24,
     borderRadius: 6,
-    backgroundColor: 'rgba(212,175,55,0.15)',
+    backgroundColor: Colors.accentStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },

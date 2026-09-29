@@ -166,16 +166,16 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
     borderColor: 'transparent',
   },
   tabActiveGold: {
-    backgroundColor: 'rgba(212,175,55,0.12)',
-    borderColor: 'rgba(212,175,55,0.3)',
+    backgroundColor: Colors.accentMuted,
+    borderColor: Colors.borderActive,
   },
   tabActiveCyan: {
-    backgroundColor: 'rgba(0,229,255,0.12)',
-    borderColor: 'rgba(0,229,255,0.3)',
+    backgroundColor: Colors.cyanMuted,
+    borderColor: Colors.cyan,
   },
   tabActiveEmerald: {
-    backgroundColor: 'rgba(16,185,129,0.12)',
-    borderColor: 'rgba(16,185,129,0.3)',
+    backgroundColor: Colors.bgSecondary,
+    borderColor: Colors.emerald400,
   },
   tabLabel: {
     fontFamily: Fonts.bodyBold,

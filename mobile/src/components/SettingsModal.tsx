@@ -14,8 +14,7 @@ import {
   ActivityIndicator,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import { getApiBase, setApiBase } from '../api/config'
-import { getEvents } from '../api/floodApi'
+import { getApiBase, saveApiBase, suggestedApiBase } from '../api/config'
 import { Colors, Fonts } from '../theme'
 
 interface SettingsModalProps {
@@ -35,20 +34,27 @@ export function SettingsModal({ visible, onClose, onSuccess }: SettingsModalProp
   })
 
   const handleTestAndSave = async () => {
-    if (!url.trim()) {
-      setStatus({ type: 'error', message: 'Please enter a server URL.' })
+    const candidate = url.trim().replace(/\/+$/, '')
+    if (!/^https?:\/\/[^\s/]+(?::\d+)?$/.test(candidate)) {
+      setStatus({ type: 'error', message: 'Enter a full URL such as http://192.168.1.15:8000.' })
       return
     }
 
     setTesting(true)
     setStatus({ type: 'idle', message: '' })
-    setApiBase(url.trim())
-
     try {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 6000)
-      const events = await getEvents(controller.signal)
-      clearTimeout(timeout)
+      let events: string[]
+      try {
+        const response = await fetch(`${candidate}/flood/events`, { signal: controller.signal })
+        if (!response.ok) throw new Error(`Server returned ${response.status} for /flood/events.`)
+        events = await response.json()
+        if (!Array.isArray(events)) throw new Error('This server did not return an event list.')
+      } finally {
+        clearTimeout(timeout)
+      }
+      await saveApiBase(candidate)
 
       setStatus({
         type: 'success',
@@ -63,7 +69,7 @@ export function SettingsModal({ visible, onClose, onSuccess }: SettingsModalProp
         type: 'error',
         message: err.name === 'AbortError'
           ? 'Connection timed out. Check if phone & PC are on the same Wi-Fi.'
-          : err?.message || 'Failed to reach FastAPI backend.',
+          : `${err?.message || 'Connection failed.'} Tried ${candidate}. Check the PC address and API port.`,
       })
     } finally {
       setTesting(false)
@@ -91,8 +97,11 @@ export function SettingsModal({ visible, onClose, onSuccess }: SettingsModalProp
           </View>
 
           <Text style={styles.desc}>
-            Specify your FastAPI backend host address. If running locally with Expo Go, use your computer's local Wi-Fi IP (e.g. http://192.168.1.15:8000).
+            Use this PC's Wi-Fi IPv4 address and the API port. Run the API with --host 0.0.0.0, then connect your phone to the same Wi-Fi.
           </Text>
+          {suggestedApiBase && <TouchableOpacity onPress={() => setUrl(suggestedApiBase || '')}>
+            <Text style={styles.suggestion}>Use Expo host: {suggestedApiBase}</Text>
+          </TouchableOpacity>}
 
           {/* Input */}
           <View style={styles.inputWrap}>
@@ -119,7 +128,7 @@ export function SettingsModal({ visible, onClose, onSuccess }: SettingsModalProp
               <Ionicons
                 name={status.type === 'success' ? 'checkmark-circle' : 'alert-circle'}
                 size={14}
-                color={status.type === 'success' ? '#34d399' : '#f87171'}
+                color={status.type === 'success' ? Colors.emerald400 : Colors.textError}
               />
               <Text
                 style={[
@@ -144,7 +153,7 @@ export function SettingsModal({ visible, onClose, onSuccess }: SettingsModalProp
               disabled={testing}
             >
               {testing ? (
-                <ActivityIndicator size="small" color="#000" />
+                <ActivityIndicator size="small" color={Colors.onAccent} />
               ) : (
                 <Text style={styles.saveBtnText}>Test & Connect</Text>
               )}
@@ -205,6 +214,11 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
     lineHeight: 18,
     marginBottom: 14,
   },
+  suggestion: {
+    color: Colors.cyan,
+    fontSize: 12,
+    marginBottom: 12,
+  },
   inputWrap: {
     backgroundColor: Colors.bgSecondary,
     borderWidth: 1,
@@ -246,7 +260,7 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
     color: '#34d399',
   },
   statusTextError: {
-    color: '#f87171',
+    color: Colors.textError,
   },
   btnRow: {
     flexDirection: 'row',
@@ -277,7 +291,7 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
   saveBtnText: {
     fontFamily: Fonts.bodyBold,
     fontSize: 12,
-    color: '#000',
+    color: Colors.onAccent,
     fontWeight: '700',
   },
 })

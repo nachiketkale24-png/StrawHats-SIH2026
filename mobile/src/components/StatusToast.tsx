@@ -35,7 +35,7 @@ export default function StatusToast({
     <View style={styles.wrapper} pointerEvents="none">
       <View style={[styles.toast, displayError ? styles.toastError : styles.toastNormal]}>
         {displayError ? (
-          <Ionicons name="alert-circle" size={16} color="#f87171" />
+          <Ionicons name="alert-circle" size={16} color={Colors.textError} />
         ) : displayLoading ? (
           <ActivityIndicator size="small" color={Colors.cyan} />
         ) : (
@@ -74,12 +74,12 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
     maxWidth: '92%',
   },
   toastNormal: {
-    backgroundColor: 'rgba(12, 14, 26, 0.95)',
+    backgroundColor: Colors.bgPanel,
     borderColor: Colors.borderPrimary,
   },
   toastError: {
-    backgroundColor: 'rgba(30, 10, 15, 0.95)',
-    borderColor: 'rgba(239, 68, 68, 0.4)',
+    backgroundColor: Colors.errorBackground,
+    borderColor: Colors.errorBorder,
   },
   pingDot: {
     height: 8,
@@ -96,6 +96,6 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
     color: Colors.textPrimary,
   },
   textError: {
-    color: '#fca5a5',
+    color: Colors.textError,
   },
 })

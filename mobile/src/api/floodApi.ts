@@ -2,7 +2,7 @@
  * Flood API client — direct port of the web frontend's lib/floodApi.ts.
  * Includes enhanced Mumbai landmark auto-suggestions and Nominatim geocoding.
  */
-import { getApiBase } from './config'
+import { getApiBase, saveApiBase, suggestedApiBase, setApiBase } from './config'
 import type { RoutePoint } from '../types/flood'
 export type RainfallSource = 'observed' | 'nowcast'
 export type RiskTolerance = 'low' | 'medium' | 'high' | 'severe'
@@ -129,7 +129,9 @@ export async function apiRequest(
   body?: unknown
 ): Promise<Response> {
   const base = getApiBase()
-  const response = await fetch(`${base}${path}`, {
+  let response: Response
+  try {
+    response = await fetch(`${base}${path}`, {
     signal,
     ...(body === undefined
       ? {}
@@ -138,7 +140,11 @@ export async function apiRequest(
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         }),
-  })
+    })
+  } catch (error) {
+    if (signal?.aborted) throw error
+    throw new Error(`Cannot reach ${base}. Use the PC's current Wi-Fi IPv4 address, start the API with --host 0.0.0.0, and keep the phone on the same network.`)
+  }
   if (!response.ok) {
     const error = await response.json().catch(() => null)
     throw new Error(
@@ -153,7 +159,24 @@ export async function apiRequest(
 // ─── API Functions ───────────────────────────────────────────────────────────
 
 export async function getEvents(signal?: AbortSignal, source: RainfallSource = 'observed'): Promise<string[]> {
-  const events = await (await apiRequest('/flood/events' + windowQuery(undefined, source), signal)).json()
+  const path = '/flood/events' + windowQuery(undefined, source)
+  let events: unknown
+  try {
+    events = await (await apiRequest(path, signal)).json()
+  } catch (error) {
+    // A saved Wi-Fi address becomes stale when the PC joins another network.
+    if (!suggestedApiBase || suggestedApiBase === getApiBase() || signal?.aborted ||
+        !(error instanceof Error) || !error.message.startsWith('Cannot reach ')) throw error
+    const previous = getApiBase()
+    setApiBase(suggestedApiBase)
+    try {
+      events = await (await apiRequest(path, signal)).json()
+      await saveApiBase(suggestedApiBase)
+    } catch {
+      setApiBase(previous)
+      throw error
+    }
+  }
   if (
     !Array.isArray(events) ||
     !events.every((event: unknown) => typeof event === 'string')

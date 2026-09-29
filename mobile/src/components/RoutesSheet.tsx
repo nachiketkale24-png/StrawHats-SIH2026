@@ -491,7 +491,7 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
     flex: 1,
     fontFamily: Fonts.body,
     fontSize: 11,
-    color: '#f87171',
+    color: Colors.textError,
   },
   computeBtn: {
     backgroundColor: Colors.gold,
@@ -517,7 +517,7 @@ const makeStyles = (Colors: ReturnType<typeof useTheme>["colors"]) => StyleSheet
   computeBtnText: {
     fontFamily: Fonts.bodyBold,
     fontSize: 12,
-    color: Colors.bgVoid,
+    color: Colors.onAccent,
     fontWeight: '800',
     letterSpacing: 0,
   },
